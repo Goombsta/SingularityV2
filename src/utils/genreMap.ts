@@ -305,7 +305,7 @@ export function groupByPlaylistCategories<T extends { genre?: string; rating?: s
     buckets.get(cat)!.push(item)
   }
 
-  return [['Trending Now', trending], ...[...buckets.entries()]]
+  return [['Trending Now', trending] as [string, T[]], ...[...buckets.entries()]]
     .filter(([, arr]) => arr.length > 0)
 }
 
