@@ -110,13 +110,30 @@ export default function LiveTvScreen() {
     const url = activeChannel.stream_url
 
     hlsRef.current?.destroy(); hlsRef.current = null
-    mpegtsRef.current?.destroy(); mpegtsRef.current = null
+    if (mpegtsRef.current) {
+      mpegtsRef.current.unload()
+      mpegtsRef.current.detachMediaElement()
+      mpegtsRef.current.destroy()
+      mpegtsRef.current = null
+    }
     video.src = ''
 
     const isHls = /\.m3u8(\?|$)/i.test(url)
 
+    // Start muted to satisfy Android WebView autoplay policy, unmute once playing
+    function mutedPlay() {
+      video.muted = true
+      Promise.resolve(video.play()).catch(() => {})
+      video.addEventListener('playing', () => { video.muted = false }, { once: true })
+    }
+
+    function tryNative() {
+      video.src = url
+      mutedPlay()
+    }
+
     function tryLiveMpegts() {
-      if (!mpegts.isSupported()) { video.src = url; video.play().catch(() => {}); return }
+      if (!mpegts.isSupported()) { tryNative(); return }
       const player = mpegts.createPlayer(
         { type: 'mpegts', url, isLive: true, hasAudio: true, hasVideo: true },
         {
@@ -131,7 +148,15 @@ export default function LiveTvScreen() {
       mpegtsRef.current = player
       player.attachMediaElement(video)
       player.load()
-      void player.play()
+      video.muted = true
+      player.play()
+      video.addEventListener('playing', () => { video.muted = false }, { once: true })
+      // Fall back to native <video src> if mpegts fails
+      player.on(mpegts.Events.ERROR, () => {
+        player.unload(); player.detachMediaElement(); player.destroy()
+        mpegtsRef.current = null
+        tryNative()
+      })
     }
 
     if (isHls && Hls.isSupported()) {
@@ -151,7 +176,7 @@ export default function LiveTvScreen() {
       hlsRef.current = hls
       hls.loadSource(url)
       hls.attachMedia(video)
-      hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}))
+      hls.on(Hls.Events.MANIFEST_PARSED, () => mutedPlay())
       hls.on(Hls.Events.ERROR, (_e, data) => {
         if (data.fatal) {
           if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
@@ -164,15 +189,21 @@ export default function LiveTvScreen() {
         }
       })
     } else if (isHls && video.canPlayType('application/vnd.apple.mpegurl')) {
-      video.src = url
-      video.play().catch(() => {})
+      // Native HLS (Safari/iOS)
+      tryNative()
     } else {
+      // Extensionless Xtream live URL or explicit .ts — try MPEG-TS, fall back to native
       tryLiveMpegts()
     }
 
     return () => {
       hlsRef.current?.destroy(); hlsRef.current = null
-      mpegtsRef.current?.destroy(); mpegtsRef.current = null
+      if (mpegtsRef.current) {
+        mpegtsRef.current.unload()
+        mpegtsRef.current.detachMediaElement()
+        mpegtsRef.current.destroy()
+        mpegtsRef.current = null
+      }
     }
   }, [activeChannel])
 
