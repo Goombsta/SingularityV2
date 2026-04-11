@@ -130,6 +130,22 @@ jobs:
           ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
           NDK_HOME: ${{ env.NDK_HOME }}
 
+      - name: Patch AndroidManifest — enable cleartext HTTP
+        run: |
+          MANIFEST="src-tauri/gen/android/app/src/main/AndroidManifest.xml"
+          # Replace placeholder or false with true so HTTP streams work on real devices
+          sed -i \
+            's/android:usesCleartextTraffic="\${usesCleartextTraffic}"/android:usesCleartextTraffic="true"/g' \
+            "$MANIFEST"
+          sed -i \
+            's/android:usesCleartextTraffic="false"/android:usesCleartextTraffic="true"/g' \
+            "$MANIFEST"
+          # Confirm the attribute is present (insert if missing entirely)
+          grep -q 'usesCleartextTraffic="true"' "$MANIFEST" || \
+            sed -i 's/android:theme="@style\/Theme.singularity"/android:theme="@style\/Theme.singularity"\n        android:usesCleartextTraffic="true"/' "$MANIFEST"
+          echo "--- Manifest after patch ---"
+          cat "$MANIFEST"
+
       - name: Decode keystore
         run: |
           echo "${{ secrets.ANDROID_KEYSTORE }}" | base64 --decode > "$HOME/singularity.keystore"

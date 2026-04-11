@@ -20,13 +20,15 @@ interface TrackInfo {
   selected: boolean
 }
 
-async function isWindows(): Promise<boolean> {
-  try {
-    return (await platform()) === 'windows'
-  } catch {
-    return false
+// platform() in @tauri-apps/plugin-os v2 is synchronous — cache at module level
+let _platformCache: string | null = null
+function getPlatform(): string {
+  if (_platformCache === null) {
+    try { _platformCache = platform() } catch { _platformCache = 'unknown' }
   }
+  return _platformCache
 }
+function isWindowsPlatform(): boolean { return getPlatform() === 'windows' }
 
 export default function PlayerScreen() {
   const location = useLocation()
@@ -153,7 +155,7 @@ export default function PlayerScreen() {
     let cancelled = false
 
     async function start() {
-      const win = await isWindows()
+      const win = isWindowsPlatform()
 
       if (!win) {
         if (!cancelled) setPlayerMode('html5')
@@ -296,12 +298,47 @@ export default function PlayerScreen() {
     // Always try HLS.js first for these — Android WebView cannot play raw MPEG-TS natively.
     const isExtensionlessLive = isLive && !isHls && !isNativeFormat && !isMpegTs
 
-    function startHls() {
+    function startNative() {
+      // Direct assignment — works for MP4, MKV, and sometimes raw MPEG-TS on Android WebView
+      video.src = url
+      video.muted = true
+      Promise.resolve(video.play()).catch(() => {})
+      video.addEventListener('playing', () => { video.muted = false }, { once: true })
+    }
+
+    function startMpegTs() {
+      if (!mpegts.isSupported()) { startNative(); return }
+      const player = mpegts.createPlayer(
+        { type: 'mpegts', url, isLive, hasAudio: true, hasVideo: true },
+        {
+          enableWorker: true,
+          enableStashBuffer: true,
+          stashInitialSize: isLive ? 512 * 1024 : undefined,
+          liveBufferLatencyChasing: false,
+          liveBufferLatencyMaxLatency: isLive ? 30 : undefined,
+          liveBufferLatencyMinRemain: isLive ? 8 : undefined,
+        }
+      )
+      mpegtsRef.current = player
+      player.attachMediaElement(video)
+      player.load()
+      video.muted = true
+      player.play()
+      video.addEventListener('playing', () => { video.muted = false }, { once: true })
+      // If mpegts fails fatally, fall back to native <video src>
+      player.on(mpegts.Events.ERROR, (_type: unknown, _data: unknown) => {
+        player.unload(); player.detachMediaElement(); player.destroy()
+        mpegtsRef.current = null
+        startNative()
+      })
+    }
+
+    function startHls(onFatalFallback?: () => void) {
       const hls = new Hls({
         enableWorker: true,
-        lowLatencyMode: false,                   // IPTV isn't true LL-HLS; thin buffer causes unnecessary rebuffers
+        lowLatencyMode: false,
         backBufferLength: isLive ? 30 : 90,
-        maxBufferLength: isLive ? 30 : 60,       // 30 s forward buffer for live
+        maxBufferLength: isLive ? 30 : 60,
         maxMaxBufferLength: isLive ? 60 : 120,
       })
       hlsRef.current = hls
@@ -313,49 +350,30 @@ export default function PlayerScreen() {
         Promise.resolve(video.play()).catch(() => {}).then(() => { video.muted = false })
       })
       hls.on(Hls.Events.ERROR, (_e, data) => {
-        if (data.fatal) { hls.destroy(); hlsRef.current = null }
-      })
-    }
-
-    function startMpegTs() {
-      if (!mpegts.isSupported()) { video.src = url; video.play().catch(() => {}); return }
-      const player = mpegts.createPlayer(
-        { type: 'mpegts', url, isLive, hasAudio: true, hasVideo: true },
-        {
-          enableWorker: true,
-          enableStashBuffer: true,                          // IO cushion; helps both live and VOD
-          stashInitialSize: isLive ? 512 * 1024 : undefined,
-          liveBufferLatencyChasing: false,                  // don't force-seek on drift; IPTV isn't low-latency
-          liveBufferLatencyMaxLatency: isLive ? 30 : undefined,
-          liveBufferLatencyMinRemain: isLive ? 8 : undefined,
+        if (data.fatal) {
+          hls.destroy(); hlsRef.current = null
+          if (onFatalFallback) onFatalFallback()
         }
-      )
-      mpegtsRef.current = player
-      player.attachMediaElement(video)
-      player.load()
-      // Android WebView blocks autoplay with audio — start muted then unmute once playing
-      video.muted = true
-      player.play()
-      video.addEventListener('playing', () => { video.muted = false }, { once: true })
+      })
     }
 
     if (isHls && Hls.isSupported()) {
       startHls()
     } else if (isHls && video.canPlayType('application/vnd.apple.mpegurl')) {
-      // Safari / iOS native HLS
+      // Native HLS (Safari/iOS)
       video.src = url
       video.play().catch(() => {})
     } else if (isNativeFormat) {
-      video.src = url
-      video.play().catch(() => {})
+      startNative()
     } else if (isExtensionlessLive) {
-      // Xtream-style URL — prefer HLS.js (works on Android WebView); fall back to MPEG-TS
+      // Xtream-style extensionless URL — try HLS first, fall back to MPEG-TS, then native
       if (Hls.isSupported()) {
-        startHls()
+        startHls(() => startMpegTs())
       } else {
         startMpegTs()
       }
     } else if (isMpegTs) {
+      // Explicit .ts URL — try MPEG-TS player, fall back to native <video src>
       startMpegTs()
     }
 
