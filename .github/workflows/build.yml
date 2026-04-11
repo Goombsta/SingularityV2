@@ -200,8 +200,8 @@ jobs:
             ### Downloads
             | Platform | File |
             |----------|------|
-            | Windows (installer) | `Singularity_*_x64-setup.exe` |
-            | Windows (MSI) | `Singularity_*.msi` |
+            | Windows (installer) | `Singularity Setup_*.exe` |
+            | Windows (MSI) | `Singularity Setup_*.msi` |
             | Android | `*.apk` |
 
             ### Install

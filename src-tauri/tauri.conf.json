@@ -43,6 +43,14 @@
     "resources": {
       "resources/libmpv-2.dll": "libmpv-2.dll"
     },
+    "windows": {
+      "nsis": {
+        "installerName": "Singularity Setup"
+      },
+      "wix": {
+        "installerName": "Singularity Setup"
+      }
+    },
     "android": {
       "minSdkVersion": 24
     }
