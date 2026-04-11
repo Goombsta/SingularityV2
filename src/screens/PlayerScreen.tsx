@@ -335,7 +335,7 @@ export default function PlayerScreen() {
       player.load()
       // Android WebView blocks autoplay with audio — start muted then unmute once playing
       video.muted = true
-      void player.play().catch(() => {})
+      player.play()
       video.addEventListener('playing', () => { video.muted = false }, { once: true })
     }
 
