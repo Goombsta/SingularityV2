@@ -1,0 +1,43 @@
+[package]
+name = "singularity"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "singularity_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+tauri-plugin-os = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+quick-xml = { version = "0.36", features = ["serialize"] }
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4"] }
+anyhow = "1"
+thiserror = "1"
+urlencoding = "2"
+
+# Non-Android (Windows/macOS/Linux) — credentials + native MPV
+[target.'cfg(not(target_os = "android"))'.dependencies]
+keyring = { version = "3", features = [] }
+
+# Windows-only: MPV native video bridge
+[target.'cfg(windows)'.dependencies]
+libmpv-sys = "3"
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_System_LibraryLoader",
+    "Win32_Graphics_Gdi",
+] }
+
+[profile.release]
+opt-level = "s"

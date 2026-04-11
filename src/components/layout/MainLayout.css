@@ -1,0 +1,155 @@
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  background: var(--gradient);
+  overflow: hidden;
+}
+
+/* Windows-style titlebar */
+.titlebar {
+  height: 32px;
+  background: linear-gradient(90deg, rgba(18, 8, 36, 0.98) 0%, rgba(12, 8, 24, 0.98) 100%);
+  border-bottom: 1px solid rgba(124, 58, 237, 0.35);
+  box-shadow: 0 1px 12px rgba(124, 58, 237, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  padding-left: 16px;
+}
+.titlebar-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-light);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.titlebar-controls { display: flex; height: 100%; }
+.titlebar-btn {
+  width: 46px; height: 32px;
+  display: flex; align-items: center; justify-content: center;
+  color: rgba(255,255,255,0.4);
+  transition: background var(--transition), color var(--transition);
+}
+.titlebar-btn:hover { background: rgba(124,58,237,0.18); color: var(--text-primary); }
+.titlebar-btn.close:hover { background: #c42b1c; color: white; }
+
+/* Content shifts right to clear the floating pill sidebar */
+.app-body {
+  flex: 1;
+  overflow: hidden;
+  padding-left: var(--sidebar-offset);
+  position: relative;
+}
+
+.content-area {
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--bg-primary);
+}
+
+/* ── Export toast ── */
+.export-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 8000;
+  background: var(--bg-card);
+  border: 1px solid rgba(124,58,237,0.35);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 260px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  animation: toast-in 0.2s ease;
+}
+.export-toast-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.export-toast-bar-track {
+  height: 4px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.export-toast-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 80ms linear;
+}
+.export-toast-pct {
+  font-size: 11px;
+  color: var(--text-secondary);
+  align-self: flex-end;
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Splash / boot overlay ── */
+.splash-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: var(--bg-primary, #080b12);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  animation: splash-in 0.2s ease;
+}
+.splash-overlay.fading {
+  animation: splash-out 0.4s ease forwards;
+  pointer-events: none;
+}
+.splash-logo-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.splash-eyebrow {
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.splash-logo {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--pink-dark) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.splash-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid rgba(255,255,255,0.1);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes splash-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes splash-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

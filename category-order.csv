@@ -1,0 +1,19 @@
+Position,Category,Applies To,Notes
+1,Trending Now,Home / Movies / Series,Always pinned first — top 30 items sorted by rating desc
+2+,Playlist categories (insertion order),Home / Movies / Series,"After Trending Now, categories appear in the order they first occur in the loaded playlist data (groupByPlaylistCategories). Order is provider-dependent."
+,,,,
+"FIXED_CATEGORIES canonical order (defined in genreMap.ts — used by groupByFixedCategories, not currently active in main screens)"
+Position,Category,,
+1,Trending Now,,
+2,Action & Adventure,,
+3,Drama,,
+4,Comedy,,
+5,Crime,,
+6,Sci-Fi & Fantasy,,
+7,Family & Kids,,
+8,Reality,,
+9,Mystery,,
+10,Documentary,,
+11,War & Politics,,
+12,Animation,,
+13,Anime,,

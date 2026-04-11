@@ -1,0 +1,4 @@
+[env]
+# Path to the directory containing mpv.lib (generated from libmpv-2.dll via lib.exe)
+# Required by the libmpv-sys build script on Windows.
+LIBMPV_LIB_DIR = { value = "src-tauri/resources", relative = true }

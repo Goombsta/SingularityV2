@@ -1,0 +1,80 @@
+.mylist-screen {
+  padding: 24px;
+  min-height: 100%;
+}
+
+.mylist-count {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.mylist-empty {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mylist-empty-inner {
+  text-align: center;
+}
+
+.mylist-empty-inner h2 { font-size: 22px; margin-bottom: 8px; }
+.mylist-empty-inner p { color: var(--text-secondary); }
+
+.mylist-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.mylist-card {
+  cursor: pointer;
+  width: 150px;
+  border-radius: var(--radius);
+  overflow: hidden;
+  transition: transform var(--transition);
+}
+.mylist-card:hover { transform: scale(1.04); }
+
+.mylist-poster {
+  width: 150px;
+  height: 225px;
+  object-fit: cover;
+  display: block;
+  border-radius: var(--radius);
+}
+
+.mylist-placeholder {
+  width: 150px;
+  height: 225px;
+  background: var(--bg-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.5rem;
+  font-weight: 700;
+  border-radius: var(--radius);
+}
+
+.mylist-info {
+  display: flex;
+  align-items: center;
+  padding: 6px 2px;
+  gap: 6px;
+}
+
+.mylist-name {
+  flex: 1;
+  font-size: 12px;
+}
+
+.mylist-remove {
+  font-size: 18px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  line-height: 1;
+  transition: color var(--transition);
+}
+.mylist-remove:hover { color: var(--red); }

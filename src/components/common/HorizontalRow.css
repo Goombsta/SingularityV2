@@ -1,0 +1,86 @@
+.h-row {
+  margin-bottom: 32px;
+}
+
+.h-row-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding: 0 24px;
+}
+
+.h-row-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.see-all-btn {
+  font-size: 13px;
+  color: var(--accent-light);
+  transition: color var(--transition);
+}
+.see-all-btn:hover { color: var(--text-primary); }
+
+/* Track wraps arrows + scroll area */
+.h-row-track {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+/* ── Arrow buttons ── */
+.h-row-arrow {
+  position: absolute;
+  top: 0;
+  bottom: 12px;
+  z-index: 10;
+  width: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 38px;
+  font-weight: 200;
+  color: white;
+  border: none;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 150ms ease, background 150ms ease;
+  line-height: 1;
+  padding-bottom: 4px;
+  user-select: none;
+  border-radius: 0;
+}
+.h-row-arrow.left {
+  left: 0;
+  background: linear-gradient(to right, rgba(6,8,16,0.96) 0%, rgba(6,8,16,0.7) 60%, transparent 100%);
+}
+.h-row-arrow.right {
+  right: 0;
+  background: linear-gradient(to left, rgba(6,8,16,0.96) 0%, rgba(6,8,16,0.7) 60%, transparent 100%);
+}
+
+/* Show on track hover */
+.h-row-track:hover .h-row-arrow { opacity: 1; }
+
+.h-row-arrow:hover {
+  opacity: 1 !important;
+  text-shadow: 0 0 20px rgba(255,255,255,0.9), 0 0 40px rgba(125,211,252,0.6);
+}
+
+/* ── Scrollable items ── */
+.h-row-items {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding: 4px 24px 12px;
+  scrollbar-width: none;
+  /* No scroll-snap — drag feel is better without it */
+  -webkit-overflow-scrolling: touch;
+  cursor: grab;
+  /* Prevent text/image selection while dragging */
+  user-select: none;
+}
+.h-row-items::-webkit-scrollbar { display: none; }
+.h-row-items.is-dragging { cursor: grabbing; }

@@ -1,0 +1,66 @@
+# ── Node / npm ───────────────────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ── Build outputs ─────────────────────────────────────────────────────────────
+dist/
+build/
+
+# ── Rust / Cargo ──────────────────────────────────────────────────────────────
+src-tauri/target/
+
+# ── Tauri Android generated project (re-generated via `tauri android init`) ───
+src-tauri/gen/android/
+
+# Keep Tauri ACL schemas (needed at build time, small JSON files)
+!src-tauri/gen/schemas/
+
+# ── Android SDK artefacts ─────────────────────────────────────────────────────
+*.apk
+*.aab
+*.ap_
+*.dex
+local.properties
+.gradle/
+*.keystore
+*.jks
+keystore.properties
+
+# ── Environment / secrets ─────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.pfx
+credentials.json
+token.json
+
+# ── Temp / intermediates ──────────────────────────────────────────────────────
+.tmp/
+*.tmp
+*.bak
+*.swp
+*~
+*.mp4
+*.mkv
+*.avi
+
+# ── Claude Code local settings ────────────────────────────────────────────────
+.claude/
+
+# ── OS / editor ───────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# ── Test / coverage ───────────────────────────────────────────────────────────
+coverage/
+*.lcov
+
+# NOTE: src-tauri/resources/libmpv-2.dll is intentionally tracked via Git LFS.
+# It is required at Windows build time and tracked with: git lfs track "src-tauri/resources/*.dll"
