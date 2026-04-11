@@ -124,7 +124,6 @@ jobs:
       - name: Build Tauri Android (APK)
         run: npm run tauri android build -- --apk
         env:
-          ANDROID_HOME: $ANDROID_SDK_ROOT
           NDK_HOME: ${{ env.NDK_HOME }}
           TAURI_ANDROID_KEYSTORE_PATH: ${{ env.KEYSTORE_PATH }}
           TAURI_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
