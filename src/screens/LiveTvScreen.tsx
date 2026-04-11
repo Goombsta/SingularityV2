@@ -118,7 +118,8 @@ export default function LiveTvScreen() {
     }
     video.src = ''
 
-    const isHls = /\.m3u8(\?|$)/i.test(url)
+    const isExplicitHls = /\.m3u8(\?|$)/i.test(url)
+    const isExplicitTs  = /\.ts(\?|$)/i.test(url)
 
     // Start muted to satisfy Android WebView autoplay policy, unmute once playing
     function mutedPlay() {
@@ -132,7 +133,7 @@ export default function LiveTvScreen() {
       mutedPlay()
     }
 
-    function tryLiveMpegts() {
+    function tryMpegts() {
       if (!mpegts.isSupported()) { tryNative(); return }
       const player = mpegts.createPlayer(
         { type: 'mpegts', url, isLive: true, hasAudio: true, hasVideo: true },
@@ -151,7 +152,6 @@ export default function LiveTvScreen() {
       video.muted = true
       player.play()
       video.addEventListener('playing', () => { video.muted = false }, { once: true })
-      // Fall back to native <video src> if mpegts fails
       player.on(mpegts.Events.ERROR, () => {
         player.unload(); player.detachMediaElement(); player.destroy()
         mpegtsRef.current = null
@@ -159,7 +159,8 @@ export default function LiveTvScreen() {
       })
     }
 
-    if (isHls && Hls.isSupported()) {
+    function tryHls(hlsUrl: string, onFail: () => void) {
+      if (!Hls.isSupported()) { onFail(); return }
       const hls = new Hls({
         enableWorker: true,
         lowLatencyMode: false,
@@ -169,31 +170,32 @@ export default function LiveTvScreen() {
         maxBufferHole: 0.5,
         startLevel: -1,
         abrEwmaDefaultEstimate: 500000,
-        fragLoadingTimeOut: 20000,
-        manifestLoadingTimeOut: 10000,
-        levelLoadingTimeOut: 10000,
+        fragLoadingTimeOut: 10000,
+        manifestLoadingTimeOut: 5000,
+        levelLoadingTimeOut: 5000,
       })
       hlsRef.current = hls
-      hls.loadSource(url)
+      hls.loadSource(hlsUrl)
       hls.attachMedia(video)
       hls.on(Hls.Events.MANIFEST_PARSED, () => mutedPlay())
       hls.on(Hls.Events.ERROR, (_e, data) => {
         if (data.fatal) {
-          if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-            hls.startLoad()
-          } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
-            hls.recoverMediaError()
-          } else {
-            hls.destroy(); hlsRef.current = null; tryLiveMpegts()
-          }
+          hls.destroy(); hlsRef.current = null
+          onFail()
         }
       })
-    } else if (isHls && video.canPlayType('application/vnd.apple.mpegurl')) {
-      // Native HLS (Safari/iOS)
-      tryNative()
+    }
+
+    if (isExplicitHls) {
+      // Explicit .m3u8 — HLS.js, fall back to native (Safari/iOS)
+      tryHls(url, () => tryNative())
+    } else if (isExplicitTs) {
+      // Explicit .ts — Xtream serves raw MPEG-TS here; go straight to mpegts.js
+      // (skipping a .m3u8 HLS attempt avoids a 10s timeout before the real player starts)
+      tryMpegts()
     } else {
-      // Extensionless Xtream live URL or explicit .ts — try MPEG-TS, fall back to native
-      tryLiveMpegts()
+      // Extensionless Xtream live URL — try HLS.js first, then mpegts, then native
+      tryHls(url, () => tryMpegts())
     }
 
     return () => {
