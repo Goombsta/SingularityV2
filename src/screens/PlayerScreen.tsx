@@ -310,7 +310,7 @@ export default function PlayerScreen() {
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         // Start muted to satisfy Android autoplay policy, unmute once playing
         video.muted = true
-        video.play().catch(() => {}).then(() => { video.muted = false })
+        Promise.resolve(video.play()).catch(() => {}).then(() => { video.muted = false })
       })
       hls.on(Hls.Events.ERROR, (_e, data) => {
         if (data.fatal) { hls.destroy(); hlsRef.current = null }
