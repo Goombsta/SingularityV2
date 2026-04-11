@@ -51,6 +51,20 @@ jobs:
       - name: Build Tauri (Windows)
         run: npm run tauri build
 
+      - name: Rename installer artifacts
+        shell: bash
+        run: |
+          EXE=$(find src-tauri/target/release/bundle/nsis -name "*.exe" | head -1)
+          if [ -n "$EXE" ]; then
+            VERSION=$(echo "$EXE" | grep -oP '\d+\.\d+\.\d+')
+            mv "$EXE" "src-tauri/target/release/bundle/nsis/Singularity Setup_${VERSION}_x64-setup.exe"
+          fi
+          MSI=$(find src-tauri/target/release/bundle/msi -name "*.msi" | head -1)
+          if [ -n "$MSI" ]; then
+            VERSION=$(echo "$MSI" | grep -oP '\d+\.\d+\.\d+')
+            mv "$MSI" "src-tauri/target/release/bundle/msi/Singularity Setup_${VERSION}_x64.msi"
+          fi
+
       - name: Upload .exe artifact
         uses: actions/upload-artifact@v4
         with:
