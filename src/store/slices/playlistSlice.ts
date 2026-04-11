@@ -44,10 +44,15 @@ export const usePlaylistStore = create<PlaylistState & PlaylistIntents>((set, ge
   seriesLoadedFor: null,
 
   loadPlaylists: async () => {
-    const playlists = await invoke<Playlist[]>('list_playlists')
-    set({ playlists, playlistsLoaded: true })
-    if (playlists.length > 0 && !get().activePlaylistId) {
-      set({ activePlaylistId: playlists[0].id })
+    try {
+      const playlists = await invoke<Playlist[]>('list_playlists')
+      set({ playlists, playlistsLoaded: true })
+      if (playlists.length > 0 && !get().activePlaylistId) {
+        set({ activePlaylistId: playlists[0].id })
+      }
+    } catch {
+      // Always mark loaded so the splash screen dismisses even if the invoke fails
+      set({ playlistsLoaded: true })
     }
   },
 

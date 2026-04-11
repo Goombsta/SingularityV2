@@ -1,6 +1,19 @@
 use super::types::*;
 use anyhow::{Context, Result};
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
+
+/// Accepts rating as either a JSON string or number, converts to String
+fn deserialize_rating<'de, D>(d: D) -> Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let v = Option::<serde_json::Value>::deserialize(d)?;
+    Ok(v.map(|val| match val {
+        serde_json::Value::String(s) => s,
+        serde_json::Value::Number(n) => n.to_string(),
+        other => other.to_string(),
+    }))
+}
 
 pub struct XtreamClient {
     pub url: String,
@@ -136,6 +149,7 @@ impl XtreamClient {
             plot: Option<String>,
             #[serde(rename = "releaseDate")]
             release_date: Option<String>,
+            #[serde(default, deserialize_with = "deserialize_rating")]
             rating: Option<String>,
             duration_secs: Option<u64>,
             category_id: Option<serde_json::Value>,

@@ -291,9 +291,12 @@ export default function PlayerScreen() {
     const urlPath = url.split('?')[0].toLowerCase()
     const isHls = /\.m3u8$/.test(urlPath)
     const isNativeFormat = /\.(mp4|mkv|avi|webm|mov|m4v|flv|wmv)$/.test(urlPath)
-    const isMpegTs = /\.ts$/.test(urlPath) || (isLive && !isHls && !isNativeFormat)
+    const isMpegTs = /\.ts$/.test(urlPath)
+    // Extensionless live URLs (Xtream Codes format: /live/user/pass/id) serve HLS.
+    // Always try HLS.js first for these — Android WebView cannot play raw MPEG-TS natively.
+    const isExtensionlessLive = isLive && !isHls && !isNativeFormat && !isMpegTs
 
-    if (isHls && Hls.isSupported()) {
+    function startHls() {
       const hls = new Hls({
         enableWorker: true,
         lowLatencyMode: false,                   // IPTV isn't true LL-HLS; thin buffer causes unnecessary rebuffers
@@ -304,14 +307,17 @@ export default function PlayerScreen() {
       hlsRef.current = hls
       hls.loadSource(url)
       hls.attachMedia(video)
-      hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}))
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        // Start muted to satisfy Android autoplay policy, unmute once playing
+        video.muted = true
+        video.play().catch(() => {}).then(() => { video.muted = false })
+      })
       hls.on(Hls.Events.ERROR, (_e, data) => {
         if (data.fatal) { hls.destroy(); hlsRef.current = null }
       })
-    } else if (isNativeFormat) {
-      video.src = url
-      video.play().catch(() => {})
-    } else if (isMpegTs || (!isHls && !isNativeFormat)) {
+    }
+
+    function startMpegTs() {
       if (!mpegts.isSupported()) { video.src = url; video.play().catch(() => {}); return }
       const player = mpegts.createPlayer(
         { type: 'mpegts', url, isLive, hasAudio: true, hasVideo: true },
@@ -327,7 +333,30 @@ export default function PlayerScreen() {
       mpegtsRef.current = player
       player.attachMediaElement(video)
       player.load()
-      void player.play()
+      // Android WebView blocks autoplay with audio — start muted then unmute once playing
+      video.muted = true
+      void player.play().catch(() => {})
+      video.addEventListener('playing', () => { video.muted = false }, { once: true })
+    }
+
+    if (isHls && Hls.isSupported()) {
+      startHls()
+    } else if (isHls && video.canPlayType('application/vnd.apple.mpegurl')) {
+      // Safari / iOS native HLS
+      video.src = url
+      video.play().catch(() => {})
+    } else if (isNativeFormat) {
+      video.src = url
+      video.play().catch(() => {})
+    } else if (isExtensionlessLive) {
+      // Xtream-style URL — prefer HLS.js (works on Android WebView); fall back to MPEG-TS
+      if (Hls.isSupported()) {
+        startHls()
+      } else {
+        startMpegTs()
+      }
+    } else if (isMpegTs) {
+      startMpegTs()
     }
 
     return () => {

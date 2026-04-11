@@ -1,6 +1,63 @@
 # Lessons Learned — Singularity Development
 
-_Last updated: 2026-04-10_
+_Last updated: 2026-04-11_
+
+---
+
+## Session: Android Debugging — Home Screen, Movies, Video Playback (2026-04-11)
+
+### Goal
+Fix three broken Android features: video playback showing gray play button, Home screen not loading, Movies section not loading. Also fix Windows title bar showing on Android and audio not working on VOD/series.
+
+### Root Causes Identified
+
+**1. `loadPlaylists` had no try/catch**
+If `invoke('list_playlists')` threw, `playlistsLoaded` was never set to `true`, the 12-second splash never dismissed, and the entire app was stuck. Fix: wrap in try/catch and always set `playlistsLoaded: true` even on error (`playlistSlice.ts`).
+
+**2. Splash screen waited 12 seconds on Android**
+`MIN_SPLASH_MS = 12000` was hardcoded for all platforms. On Android this blocked the UI for 12 seconds even when data loaded instantly. Fix: detect platform and set `MIN_SPLASH_MS = 0` on Android (`MainLayout.tsx`).
+
+**3. `platform()` from `@tauri-apps/plugin-os` v2 is synchronous, not a Promise**
+Multiple attempts to call `.then()` on it caused `TypeError: platform(...).then is not a function` which crashed the entire React tree via the Router error boundary. Fix: call it directly as a plain function, cache result at module level in a `getIsAndroid()` helper.
+
+**4. Xtream Codes `rating` field is a float, not a string**
+The Rust `XtreamVod` struct had `rating: Option<String>` but the API returns `6.3` (a JSON float). This caused `Failed to parse VOD streams` silently. Fix: custom `deserialize_rating` serde function that accepts both string and number (`xtream.rs`).
+
+**5. Cleartext HTTP blocked on Android**
+`AndroidManifest.xml` had `android:usesCleartextTraffic="${usesCleartextTraffic}"` with the placeholder never resolved, defaulting to `false`. IPTV streams are HTTP not HTTPS, so all fetches failed with `Failed to fetch`. Fix: hardcode `android:usesCleartextTraffic="true"`.
+
+**6. Windows title bar rendered on Android**
+The titlebar with minimize/maximize/close was unconditionally rendered. Fix: check `getIsAndroid()` and conditionally render (`MainLayout.tsx`).
+
+**7. Android autoplay policy blocks audio**
+`video.play()` fails silently on Android WebView when audio is present without a user gesture. mpegts.js was parsing the stream (H264+AAC detected) but audio was blocked. Fix: start `video.muted = true`, play, then set `video.muted = false` on the `playing` event.
+
+**8. Emulator OOM crashes from image-heavy home screen**
+30 poster images × many categories exceeded Android emulator WebView renderer memory, causing `pthread_mutex_lock called on a destroyed mutex` SIGABRT in RenderThread. Fix: reduce items per row from 30 to 10. Real fix: set emulator RAM to 4096 MB in AVD Manager.
+
+### What Worked
+- Rust `cargo check` (host target) reliably catches type/syntax errors without needing the full Android NDK toolchain.
+- Vite HMR hot-reloads JS/TS changes instantly to the running emulator — no reinstall needed for frontend fixes.
+- `adb logcat -s "Tauri/Console"` gives clean JS console output from the app, filtered from Android system noise.
+- Adding temporary `console.log`/`console.error` to store slices is the fastest way to diagnose Rust invoke failures.
+- The `text()` → `serde_json::from_str` pattern (vs `.json()`) gives actionable error messages including the first 200 chars of the bad response.
+
+### What Did Not Work / Watch Out For
+- `cargo check --target x86_64-linux-android` fails without NDK env vars — only works inside `tauri android dev`. Use `cargo check` (host) for syntax checks instead.
+- `tauri android init` overwrites the generated Android project, losing icon customizations. Must re-copy `src-tauri/icons/android/` to `src-tauri/gen/android/app/src/main/res/` after every `init`.
+- `tauri android dev` requires Developer Mode enabled on Windows 11 to create symlinks for `jniLibs`. Without it: `Creation symbolic link is not allowed for this system`.
+- React Router's error boundary catches render-time exceptions but does NOT recover on HMR — must force-stop and relaunch the app after fixing a crash that hit the boundary.
+- The emulator's default RAM (~2 GB) is too low for a media app with many poster images. Always set to 4096 MB. Real Android devices don't have this problem.
+- `BUILD FAILED in 4s` from Gradle usually means the emulator wasn't running or a transient daemon issue — retry before investigating.
+- `tauri android dev` APK is in dev mode and requires the Vite server (`npm run dev`) to be running on the host PC. Without it: white screen + "failed to request" error.
+
+### Files Changed
+- `src/store/slices/playlistSlice.ts` — try/catch on `loadPlaylists`
+- `src/components/layout/MainLayout.tsx` — synchronous `platform()`, Android splash skip, hide titlebar
+- `src/screens/PlayerScreen.tsx` — HLS/MPEG-TS stream detection for extensionless URLs, muted autoplay fix
+- `src/screens/HomeScreen.tsx` — reduce items per row from 30 to 10
+- `src-tauri/src/playlist/xtream.rs` — `deserialize_rating` accepting float or string
+- `src-tauri/gen/android/app/src/main/AndroidManifest.xml` — `usesCleartextTraffic="true"`
 
 ---
 

@@ -199,7 +199,7 @@ export default function HomeScreen() {
           ) : (
             movieCategories.map(([genre, items]) => (
               <HorizontalRow key={genre} title={genre} onSeeAll={() => navigate('/vod', { state: { category: genre } })}>
-                {items.slice(0, 30).map((v) => (
+                {items.slice(0, 10).map((v) => (
                   <RowCard
                     key={v.id}
                     poster={v.poster}
@@ -225,7 +225,7 @@ export default function HomeScreen() {
           ) : (
             seriesCategories.map(([genre, items]) => (
               <HorizontalRow key={genre} title={genre} onSeeAll={() => navigate('/series', { state: { category: genre } })}>
-                {items.slice(0, 30).map((s) => (
+                {items.slice(0, 10).map((s) => (
                   <RowCard
                     key={s.id}
                     poster={s.poster}
