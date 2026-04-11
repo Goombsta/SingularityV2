@@ -116,11 +116,20 @@ jobs:
           ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
           NDK_HOME: ${{ env.NDK_HOME }}
 
+      - name: Decode keystore
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE }}" | base64 --decode > "$HOME/singularity.keystore"
+          echo "KEYSTORE_PATH=$HOME/singularity.keystore" >> $GITHUB_ENV
+
       - name: Build Tauri Android (APK)
         run: npm run tauri android build -- --apk
         env:
-          ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
+          ANDROID_HOME: $ANDROID_SDK_ROOT
           NDK_HOME: ${{ env.NDK_HOME }}
+          TAURI_ANDROID_KEYSTORE_PATH: ${{ env.KEYSTORE_PATH }}
+          TAURI_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          TAURI_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          TAURI_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
