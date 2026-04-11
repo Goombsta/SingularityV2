@@ -3,6 +3,7 @@ name: Build Singularity
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
     branches: [main]
 
@@ -127,3 +128,57 @@ jobs:
           name: singularity-android-apk
           path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
           if-no-files-found: warn
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Create GitHub Release (only on version tags)
+  # ───────────────────────────────────────────────────────────────────────────
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [build-windows, build-android]
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download Windows .exe
+        uses: actions/download-artifact@v4
+        with:
+          name: singularity-windows-exe
+          path: release-assets/
+
+      - name: Download Windows .msi
+        uses: actions/download-artifact@v4
+        with:
+          name: singularity-windows-msi
+          path: release-assets/
+
+      - name: Download Android APK
+        uses: actions/download-artifact@v4
+        with:
+          name: singularity-android-apk
+          path: release-assets/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Singularity ${{ github.ref_name }}
+          body: |
+            ## Singularity ${{ github.ref_name }}
+
+            IPTV/VOD streaming player for Windows Desktop and Android.
+
+            ### Downloads
+            | Platform | File |
+            |----------|------|
+            | Windows (installer) | `Singularity_*_x64-setup.exe` |
+            | Windows (MSI) | `Singularity_*.msi` |
+            | Android | `*.apk` |
+
+            ### Install
+            - **Windows**: Run the `.exe` installer or the `.msi` package
+            - **Android**: Enable "Install from unknown sources", then install the `.apk`
+          files: release-assets/**/*
+          fail_on_unmatched_files: false
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
