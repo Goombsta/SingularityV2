@@ -121,20 +121,63 @@ jobs:
           echo "${{ secrets.ANDROID_KEYSTORE }}" | base64 --decode > "$HOME/singularity.keystore"
           echo "KEYSTORE_PATH=$HOME/singularity.keystore" >> $GITHUB_ENV
 
+      - name: Patch app/build.gradle with release signing config
+        run: |
+          GRADLE=src-tauri/gen/android/app/build.gradle.kts
+          # Insert signingConfigs block and wire it to the release buildType
+          python3 - <<'PYEOF'
+          import re, os
+          path = "src-tauri/gen/android/app/build.gradle.kts"
+          text = open(path).read()
+
+          signing_block = """
+              signingConfigs {
+                  create("release") {
+                      storeFile = file(System.getenv("KEYSTORE_PATH") ?: "")
+                      storePassword = System.getenv("ANDROID_STORE_PASSWORD") ?: ""
+                      keyAlias = System.getenv("ANDROID_KEY_ALIAS") ?: ""
+                      keyPassword = System.getenv("ANDROID_KEY_PASSWORD") ?: ""
+                  }
+              }
+          """
+
+          # Add signingConfigs before buildTypes
+          text = text.replace("    buildTypes {", signing_block + "    buildTypes {")
+
+          # Wire release buildType to use the signing config
+          text = re.sub(
+              r'(release\s*\{)',
+              r'\1\n            signingConfig = signingConfigs.getByName("release")',
+              text,
+              count=1
+          )
+
+          open(path, "w").write(text)
+          print("Patched", path)
+          PYEOF
+        env:
+          KEYSTORE_PATH: ${{ env.KEYSTORE_PATH }}
+
       - name: Build Tauri Android (APK)
         run: npm run tauri android build -- --apk
         env:
           NDK_HOME: ${{ env.NDK_HOME }}
-          TAURI_ANDROID_KEYSTORE_PATH: ${{ env.KEYSTORE_PATH }}
-          TAURI_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
-          TAURI_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          TAURI_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          KEYSTORE_PATH: ${{ env.KEYSTORE_PATH }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+      - name: Rename APK
+        run: |
+          find src-tauri/gen/android/app/build/outputs/apk -name "*.apk" | while read f; do
+            mv "$f" "$(dirname $f)/SingularityV2.apk"
+          done
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: singularity-android-apk
-          path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          path: src-tauri/gen/android/app/build/outputs/apk/**/SingularityV2.apk
           if-no-files-found: warn
 
   # ───────────────────────────────────────────────────────────────────────────
