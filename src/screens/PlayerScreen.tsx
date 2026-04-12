@@ -12,6 +12,23 @@ import './PlayerScreen.css'
 // 'html5'   = HTML5 <video> fallback (Android, or MPV failed)
 type PlayerMode = 'pending' | 'mpv' | 'html5'
 
+// Proxy loader for HLS.js — rewrites fragment URLs through the local Rust proxy
+// so CDNs never see browser Origin/Referer headers. Only used for explicit .m3u8 URLs.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function makeProxyLoader(proxyPort: number): any {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const Base: any = Hls.DefaultConfig.loader
+  return class extends Base {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    load(context: any, config: any, callbacks: any) {
+      if (context.url && !/^http:\/\/127\.0\.0\.1/.test(context.url)) {
+        context = { ...context, url: `http://127.0.0.1:${proxyPort}/proxy?url=${encodeURIComponent(context.url)}` }
+      }
+      super.load(context, config, callbacks)
+    }
+  }
+}
+
 interface TrackInfo {
   id: number
   track_type: string
@@ -38,6 +55,7 @@ export default function PlayerScreen() {
   // Stores the player ID for the current session so handlers outside the effect
   // can send commands to the right player instance.
   const playerIdRef = useRef('')
+  const proxyPortRef = useRef<number | null>(null)
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
@@ -134,6 +152,13 @@ export default function PlayerScreen() {
     const id = setInterval(pollStats, 1500)
     return () => { cancelled = true; clearInterval(id) }
   }, [showTechStats, playerMode])
+
+  // ── Fetch proxy port once on mount ────────────────────────────────────────
+  useEffect(() => {
+    invoke<number | null>('get_proxy_port')
+      .then(p => { proxyPortRef.current = p ?? null })
+      .catch(() => {})
+  }, [])
 
   // ── Redirect if no stream state ────────────────────────────────────────────
   useEffect(() => {
@@ -333,13 +358,15 @@ export default function PlayerScreen() {
       })
     }
 
-    function startHls(onFatalFallback?: () => void, sourceUrl?: string) {
+    function startHls(onFatalFallback?: () => void, sourceUrl?: string, useProxy?: boolean) {
+      const proxyPort = useProxy ? proxyPortRef.current : null
       const hls = new Hls({
         enableWorker: true,
         lowLatencyMode: false,
         backBufferLength: isLive ? 30 : 90,
         maxBufferLength: isLive ? 30 : 60,
         maxMaxBufferLength: isLive ? 60 : 120,
+        ...(proxyPort != null ? { fLoader: makeProxyLoader(proxyPort) } : {}),
       })
       hlsRef.current = hls
       hls.loadSource(sourceUrl ?? url)
@@ -358,7 +385,7 @@ export default function PlayerScreen() {
     }
 
     if (isHls && Hls.isSupported()) {
-      startHls()
+      startHls(undefined, undefined, true)  // proxy segment requests for explicit .m3u8
     } else if (isHls && video.canPlayType('application/vnd.apple.mpegurl')) {
       // Native HLS (Safari/iOS)
       video.src = url

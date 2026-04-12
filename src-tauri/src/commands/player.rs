@@ -328,6 +328,10 @@ mod windows_impl {
         // from the URL extension (supplied by the Xtream container_extension field),
         // so aggressive probing is unnecessary and causes hangs on certain providers.
         let _ = mpv_set_str(ctx, "demuxer-lavf-probescore", "10");
+        // For live HLS: start from the last (freshest) segment instead of the first.
+        // Without this, MPV starts at the beginning of the rolling CDN window where
+        // early segments may already have expired, causing immediate 404 failures.
+        let _ = mpv_set_str(ctx, "demuxer-lavf-o", "live_start_index=-1");
 
         if live {
             // Live streams: small forward buffer to keep latency low.

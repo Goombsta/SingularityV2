@@ -2,6 +2,12 @@ mod commands;
 mod epg;
 mod persist;
 mod playlist;
+mod proxy;
+
+#[tauri::command]
+fn get_proxy_port() -> Option<u16> {
+    proxy::port()
+}
 
 use commands::favorites::FavoritesStore;
 use epg::{EpgCache, EpgSource};
@@ -26,6 +32,9 @@ pub fn run() {
 
     builder
         .setup(|app| {
+            // Start the HLS proxy (binds to 127.0.0.1:random port)
+            tauri::async_runtime::spawn(proxy::start());
+
             let handle = app.handle();
 
             // ── Restore persisted playlists ───────────────────────────────────
@@ -70,6 +79,8 @@ pub fn run() {
             commands::favorites::add_to_favorites,
             commands::favorites::remove_from_favorites,
             commands::favorites::get_favorites,
+            // HLS proxy port
+            get_proxy_port,
             // OMDb metadata
             commands::omdb::fetch_omdb,
             // TMDB metadata

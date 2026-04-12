@@ -1,6 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { invoke } from '@tauri-apps/api/core'
 import Hls from 'hls.js'
 import mpegts from 'mpegts.js'
+
+// Proxy loader for HLS.js — rewrites fragment URLs through the local Rust proxy
+// so CDNs never see browser Origin/Referer headers. Only used for explicit .m3u8 URLs.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function makeProxyLoader(proxyPort: number): any {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const Base: any = Hls.DefaultConfig.loader
+  return class extends Base {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    load(context: any, config: any, callbacks: any) {
+      if (context.url && !/^http:\/\/127\.0\.0\.1/.test(context.url)) {
+        context = { ...context, url: `http://127.0.0.1:${proxyPort}/proxy?url=${encodeURIComponent(context.url)}` }
+      }
+      super.load(context, config, callbacks)
+    }
+  }
+}
 import { useEpgStore } from '../store/slices/epgSlice'
 import { usePlaylistStore } from '../store/slices/playlistSlice'
 import PlaylistPicker from '../components/common/PlaylistPicker'
@@ -24,6 +42,7 @@ export default function LiveTvScreen() {
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
   const mpegtsRef = useRef<mpegts.Player | null>(null)
+  const proxyPortRef = useRef<number | null>(null)
   const [paused, setPaused] = useState(false)
   const [position, setPosition] = useState(0)
   const [duration, setDuration] = useState(0)
@@ -57,6 +76,13 @@ export default function LiveTvScreen() {
     const id = setInterval(pollStats, 1500)
     return () => { cancelled = true; clearInterval(id) }
   }, [showTechStats, activeChannel])
+
+  // Fetch proxy port once on mount
+  useEffect(() => {
+    invoke<number | null>('get_proxy_port')
+      .then(p => { proxyPortRef.current = p ?? null })
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (activePlaylistId) fetchChannels(activePlaylistId)
@@ -187,8 +213,9 @@ export default function LiveTvScreen() {
       })
     }
 
-    function tryHls(hlsUrl: string, onFail: () => void) {
+    function tryHls(hlsUrl: string, onFail: () => void, useProxy?: boolean) {
       if (!Hls.isSupported()) { onFail(); return }
+      const proxyPort = useProxy ? proxyPortRef.current : null
       const hls = new Hls({
         enableWorker: true,
         lowLatencyMode: false,
@@ -201,6 +228,7 @@ export default function LiveTvScreen() {
         fragLoadingTimeOut: 10000,
         manifestLoadingTimeOut: 5000,
         levelLoadingTimeOut: 5000,
+        ...(proxyPort != null ? { fLoader: makeProxyLoader(proxyPort) } : {}),
       })
       hlsRef.current = hls
       hls.loadSource(hlsUrl)
@@ -215,8 +243,8 @@ export default function LiveTvScreen() {
     }
 
     if (isExplicitHls) {
-      // Explicit .m3u8 — HLS.js, fall back to native (Safari/iOS)
-      tryHls(url, () => tryNative())
+      // Explicit .m3u8 — HLS.js with proxy to bypass CDN origin checks, fall back to native
+      tryHls(url, () => tryNative(), true)
     } else if (isExplicitTs) {
       // Explicit .ts — try HLS first with .m3u8 variant (works on Android WebView + Desktop),
       // fall back to mpegts.js, then native
@@ -241,7 +269,7 @@ export default function LiveTvScreen() {
   const togglePlay = () => {
     const v = videoRef.current
     if (!v) return
-    if (v.paused) { v.play(); setPaused(false) }
+    if (v.paused) { v.play().catch(() => {}); setPaused(false) }
     else { v.pause(); setPaused(true) }
   }
 
