@@ -341,12 +341,22 @@ function EpgSettings() {
 type TestState = 'idle' | 'testing' | 'ok' | 'fail'
 
 function IntegrationsSettings() {
-  const [tmdbKey, setTmdbKey] = useState(() => localStorage.getItem('tmdb_api_key') || '')
-  const [omdbKey, setOmdbKey] = useState(() => localStorage.getItem('omdb_api_key') || '')
+  const [tmdbKey, setTmdbKey] = useState('')
+  const [omdbKey, setOmdbKey] = useState('')
   const [tmdbTest, setTmdbTest] = useState<TestState>('idle')
   const [tmdbError, setTmdbError] = useState('')
   const [omdbTest, setOmdbTest] = useState<TestState>('idle')
   const [omdbError, setOmdbError] = useState('')
+
+  // Load saved keys from credential storage, fall back to localStorage
+  useEffect(() => {
+    invoke<string | null>('get_credential', { key: 'tmdb_api_key' })
+      .catch(() => null)
+      .then((v) => setTmdbKey(v || localStorage.getItem('tmdb_api_key') || ''))
+    invoke<string | null>('get_credential', { key: 'omdb_api_key' })
+      .catch(() => null)
+      .then((v) => setOmdbKey(v || localStorage.getItem('omdb_api_key') || ''))
+  }, [])
 
   const saveTmdb = async () => {
     const key = tmdbKey.trim()
@@ -355,6 +365,7 @@ function IntegrationsSettings() {
     setTmdbError('')
     try {
       await invoke('fetch_tmdb', { title: 'Inception', year: '2010', mediaType: 'movie', apiKey: key })
+      await invoke('store_credential', { key: 'tmdb_api_key', value: key }).catch(() => {})
       localStorage.setItem('tmdb_api_key', key)
       setTmdbTest('ok')
     } catch (e) {
@@ -370,6 +381,7 @@ function IntegrationsSettings() {
     setOmdbError('')
     try {
       await invoke('fetch_omdb', { title: 'Inception', year: '2010', apiKey: key })
+      await invoke('store_credential', { key: 'omdb_api_key', value: key }).catch(() => {})
       localStorage.setItem('omdb_api_key', key)
       setOmdbTest('ok')
     } catch (e) {
