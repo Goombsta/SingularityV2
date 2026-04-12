@@ -64,6 +64,8 @@ export default function PlayerScreen() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const mpvActiveRef = useRef(false)
   const tracksLoadedRef = useRef(false)
+  const stallTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [playerMode, setPlayerMode] = useState<PlayerMode>('pending')
   const [videoReady, setVideoReady] = useState(false)
@@ -77,6 +79,8 @@ export default function PlayerScreen() {
   const [fading, setFading] = useState(false)
   const [mpvError, setMpvError] = useState<string | null>(null)
   const [streamError, setStreamError] = useState(false)
+  const [reconnecting, setReconnecting] = useState(false)
+  const [reconnectKey, setReconnectKey] = useState(0)
 
   // Tracks
   const [subtitleTracks, setSubtitleTracks] = useState<TrackInfo[]>([])
@@ -299,6 +303,22 @@ export default function PlayerScreen() {
     return () => window.removeEventListener('resize', onResize)
   }, [playerMode])
 
+  // ── Live stream auto-reconnect (HTML5 mode) ────────────────────────────────
+  const clearStallTimer = () => {
+    if (stallTimerRef.current) { clearTimeout(stallTimerRef.current); stallTimerRef.current = null }
+  }
+
+  const triggerReconnect = () => {
+    if (reconnectTimerRef.current) return
+    clearStallTimer()
+    setReconnecting(true)
+    reconnectTimerRef.current = setTimeout(() => {
+      reconnectTimerRef.current = null
+      setReconnecting(false)
+      setReconnectKey((k) => k + 1)
+    }, 3000)
+  }
+
   // ── HTML5 stream setup ─────────────────────────────────────────────────────
   useEffect(() => {
     if (playerMode !== 'html5' || !state?.url || !videoRef.current) return
@@ -380,6 +400,7 @@ export default function PlayerScreen() {
         if (data.fatal) {
           hls.destroy(); hlsRef.current = null
           if (onFatalFallback) onFatalFallback()
+          else if (isLive) triggerReconnect()
         }
       })
     }
@@ -418,8 +439,9 @@ export default function PlayerScreen() {
         mpegtsRef.current.destroy()
         mpegtsRef.current = null
       }
+      clearStallTimer()
     }
-  }, [state?.url, state?.live, playerMode])
+  }, [state?.url, state?.live, playerMode, reconnectKey])
 
   // ── Controls auto-hide ─────────────────────────────────────────────────────
   const resetControlsTimer = useCallback(() => {
@@ -432,6 +454,11 @@ export default function PlayerScreen() {
     resetControlsTimer()
     return () => { if (controlsTimer.current) clearTimeout(controlsTimer.current) }
   }, [resetControlsTimer])
+
+  useEffect(() => () => {
+    if (stallTimerRef.current) clearTimeout(stallTimerRef.current)
+    if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current)
+  }, [])
 
   // ── Control actions ────────────────────────────────────────────────────────
   const togglePlay = () => {
@@ -563,16 +590,27 @@ export default function PlayerScreen() {
           playsInline
           disablePictureInPicture
           onContextMenu={(e) => e.preventDefault()}
-          onTimeUpdate={(e) => setPosition(e.currentTarget.currentTime)}
+          onTimeUpdate={(e) => { setPosition(e.currentTarget.currentTime); clearStallTimer() }}
           onDurationChange={(e) => setDuration(e.currentTarget.duration)}
           onPlay={() => setPaused(false)}
           onPause={() => setPaused(true)}
-          onError={() => setStreamError(true)}
+          onPlaying={() => { clearStallTimer(); setReconnecting(false) }}
+          onEnded={() => { if (state?.live !== false) triggerReconnect() }}
+          onStalled={() => { if (state?.live !== false) { clearStallTimer(); stallTimerRef.current = setTimeout(triggerReconnect, 10000) } }}
+          onWaiting={() => { if (state?.live !== false && !stallTimerRef.current) { stallTimerRef.current = setTimeout(triggerReconnect, 10000) } }}
+          onError={() => { if (state?.live !== false) triggerReconnect(); else setStreamError(true) }}
         />
       )}
 
       {mpvError && (
         <div className="player-error-badge">MPV: {mpvError}</div>
+      )}
+
+      {reconnecting && playerMode === 'html5' && (
+        <div className="player-reconnect-badge">
+          <span className="player-reconnect-spinner" />
+          Reconnecting…
+        </div>
       )}
 
       {streamError && playerMode === 'mpv' && (

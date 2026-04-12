@@ -78,3 +78,16 @@
   transition: color var(--transition);
 }
 .mylist-remove:hover { color: var(--red); }
+
+.mylist-type-badge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 5px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.mylist-type-channel { background: rgba(226, 85, 85, 0.2); color: #e25555; }
+.mylist-type-vod     { background: rgba(99, 102, 241, 0.2); color: #818cf8; }
+.mylist-type-series  { background: rgba(16, 185, 129, 0.2); color: #34d399; }

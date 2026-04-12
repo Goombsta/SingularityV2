@@ -44,6 +44,34 @@
 }
 
 /* ── Error overlays ──────────────────────────────────────────────────── */
+.player-reconnect-badge {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(0,0,0,0.75);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 12px;
+  padding: 4px 12px 4px 10px;
+  font-size: 12px;
+  color: rgba(255,255,255,0.85);
+  pointer-events: none;
+  z-index: 10;
+}
+.player-reconnect-spinner {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border: 2px solid rgba(255,255,255,0.2);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: player-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes player-spin { to { transform: rotate(360deg); } }
+
 .player-error-badge {
   position: absolute;
   top: 60px;

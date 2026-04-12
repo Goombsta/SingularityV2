@@ -1,13 +1,17 @@
 import { useNavigate } from 'react-router-dom'
 import { useUiStore } from '../store/slices/uiSlice'
+import type { FavoriteItem } from '../types'
 import './MyListScreen.css'
 
 export default function MyListScreen() {
   const { favorites, removeFavorite } = useUiStore()
   const navigate = useNavigate()
 
-  const handlePlay = (url: string, title: string) => {
-    if (url) navigate('/player', { state: { url, title } })
+  const handleItemClick = (fav: FavoriteItem) => {
+    if (fav.type === 'channel') {
+      navigate('/live', { state: { autoPlayChannelId: fav.id } })
+    }
+    // VOD/Series: navigation handled when stream URL is available
   }
 
   if (favorites.length === 0) {
@@ -34,7 +38,7 @@ export default function MyListScreen() {
           <div
             key={fav.id}
             className="mylist-card"
-            onClick={() => handlePlay('', fav.name)}
+            onClick={() => handleItemClick(fav)}
           >
             {fav.poster ? (
               <img src={fav.poster} alt={fav.name} className="mylist-poster" />
@@ -43,6 +47,7 @@ export default function MyListScreen() {
             )}
             <div className="mylist-info">
               <span className="mylist-name truncate">{fav.name}</span>
+              <span className={`mylist-type-badge mylist-type-${fav.type}`}>{fav.type === 'channel' ? 'TV' : fav.type}</span>
               <button
                 className="mylist-remove"
                 onClick={(e) => { e.stopPropagation(); removeFavorite(fav.id) }}

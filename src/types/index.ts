@@ -90,6 +90,7 @@ export interface FavoriteItem {
   type: 'channel' | 'vod' | 'series'
   poster?: string
   playlist_id: string
+  stream_url?: string   // stored for channels so Favorites work across playlists
 }
 
 export type MultiviewLayout = '2v' | '2h' | '3' | '4'
