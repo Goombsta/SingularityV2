@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { invoke } from '@tauri-apps/api/core'
 import Hls from 'hls.js'
 import mpegts from 'mpegts.js'
+
+const FAVORITES = '__favorites__'
 
 // Proxy loader for HLS.js — rewrites fragment URLs through the local Rust proxy
 // so CDNs never see browser Origin/Referer headers. Only used for explicit .m3u8 URLs.
@@ -21,13 +24,18 @@ function makeProxyLoader(proxyPort: number): any {
 }
 import { useEpgStore } from '../store/slices/epgSlice'
 import { usePlaylistStore } from '../store/slices/playlistSlice'
+import { useUiStore } from '../store/slices/uiSlice'
 import PlaylistPicker from '../components/common/PlaylistPicker'
 import type { Channel } from '../types'
 import './LiveTvScreen.css'
 
 export default function LiveTvScreen() {
+  const location = useLocation()
+  const autoPlayChannelId = (location.state as { autoPlayChannelId?: string } | null)?.autoPlayChannelId
+
   const { activePlaylistId, channels, fetchChannels, status, error } = usePlaylistStore()
   const { getNowAndNext } = useEpgStore()
+  const { favorites, addFavorite, removeFavorite, isFavorite } = useUiStore()
 
   const [activeGroup, setActiveGroup] = useState<string>('ALL')
   const [activeChannel, setActiveChannel] = useState<Channel | null>(null)
@@ -93,13 +101,28 @@ export default function LiveTvScreen() {
     return gs.sort()
   }, [channels])
 
+  // Favorites built directly from the store — works even if the current playlist failed/switched
+  const favoriteChannels = useMemo<Channel[]>(() => {
+    return favorites
+      .filter((f) => f.type === 'channel' && f.name.toLowerCase().includes(search.toLowerCase()))
+      .map((f) => ({
+        id: f.id,
+        name: f.name,
+        logo: f.poster,
+        stream_url: f.stream_url ?? '',
+        group_title: 'Favorites',
+        epg_channel_id: undefined,
+      } as Channel))
+  }, [favorites, search])
+
   const filtered = useMemo(() => {
+    const matchSearch = (c: Channel) => c.name.toLowerCase().includes(search.toLowerCase())
+    if (activeGroup === FAVORITES) return favoriteChannels
     return channels.filter((c) => {
       const matchGroup = activeGroup === 'ALL' || c.group_title === activeGroup
-      const matchSearch = c.name.toLowerCase().includes(search.toLowerCase())
-      return matchGroup && matchSearch
+      return matchGroup && matchSearch(c)
     })
-  }, [channels, activeGroup, search])
+  }, [channels, activeGroup, search, favoriteChannels])
 
   // Pre-compute EPG for visible channels once — avoids calling getNowAndNext
   // inside the render loop for every channel card (expensive with large EPG data)
@@ -132,6 +155,30 @@ export default function LiveTvScreen() {
     setPanelsCollapsed(false)
     setPanelsOverlay(false)
   }
+
+  const toggleFavorite = (ch: Channel, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (isFavorite(ch.id)) {
+      removeFavorite(ch.id)
+    } else {
+      addFavorite({
+        id: ch.id,
+        name: ch.name,
+        type: 'channel',
+        poster: ch.logo || undefined,
+        playlist_id: activePlaylistId ?? '',
+        stream_url: ch.stream_url,
+      })
+    }
+  }
+
+  // Auto-play a channel when navigated from My List
+  useEffect(() => {
+    if (!autoPlayChannelId || channels.length === 0 || activeChannel) return
+    const ch = channels.find((c) => c.id === autoPlayChannelId)
+    if (ch) playChannel(ch)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoPlayChannelId, channels])
 
   // Android hardware back button — fires popstate when it pops the state we pushed
   useEffect(() => {
@@ -324,9 +371,16 @@ export default function LiveTvScreen() {
           />
         </div>
 
-        <div className="livetv-cat-favorites">
-          <span className="heart-icon">♥</span> Favorites
-        </div>
+        <button
+          className={`livetv-cat-favorites${activeGroup === FAVORITES ? ' active' : ''}`}
+          onClick={() => setActiveGroup(FAVORITES)}
+        >
+          <span className="heart-icon">♥</span>
+          Favorites
+          {favorites.filter((f) => f.type === 'channel').length > 0 && (
+            <span className="livetv-fav-count">{favorites.filter((f) => f.type === 'channel').length}</span>
+          )}
+        </button>
 
         <div className="livetv-cat-label">ALL</div>
         <button
@@ -350,7 +404,35 @@ export default function LiveTvScreen() {
 
       {/* ── Middle: Channel grid ── */}
       <section className="livetv-grid-panel">
-        {status === 'loading' ? (
+        {activeGroup === FAVORITES ? (
+          favoriteChannels.length === 0 ? (
+            <div className="livetv-empty">
+              <p className="livetv-empty-title">No favorites yet</p>
+              <p className="livetv-empty-detail">Tap ♡ on any channel to add it here.</p>
+            </div>
+          ) : (
+            <div className="livetv-channel-grid">
+              {favoriteChannels.map((ch) => {
+                const epgTitle = epgMap.get(ch.id)
+                const isActive = activeChannel?.id === ch.id
+                return (
+                  <div key={ch.id} className={`livetv-ch-card ${isActive ? 'active' : ''}`} onClick={() => playChannel(ch)}>
+                    <div className="livetv-ch-logo-wrap">
+                      {ch.logo ? (
+                        <img src={ch.logo} alt={ch.name} className="livetv-ch-logo" loading="lazy" />
+                      ) : (
+                        <div className="livetv-ch-logo-placeholder">{ch.name.slice(0, 2).toUpperCase()}</div>
+                      )}
+                      <button className="livetv-ch-fav active" onClick={(e) => toggleFavorite(ch, e)} title="Remove from favorites">♥</button>
+                    </div>
+                    <p className="livetv-ch-name truncate">{ch.name}</p>
+                    {epgTitle && <p className="livetv-ch-epg truncate">{epgTitle}</p>}
+                  </div>
+                )
+              })}
+            </div>
+          )
+        ) : status === 'loading' ? (
           <div className="livetv-loading">Loading channels…</div>
         ) : status === 'error' ? (
           <div className="livetv-empty">
@@ -382,6 +464,13 @@ export default function LiveTvScreen() {
                         {ch.name.slice(0, 2).toUpperCase()}
                       </div>
                     )}
+                    <button
+                      className={`livetv-ch-fav${isFavorite(ch.id) ? ' active' : ''}`}
+                      onClick={(e) => toggleFavorite(ch, e)}
+                      title={isFavorite(ch.id) ? 'Remove from favorites' : 'Add to favorites'}
+                    >
+                      {isFavorite(ch.id) ? '♥' : '♡'}
+                    </button>
                   </div>
                   <p className="livetv-ch-name truncate">{ch.name}</p>
                   {epgTitle && <p className="livetv-ch-epg truncate">{epgTitle}</p>}
@@ -401,6 +490,13 @@ export default function LiveTvScreen() {
             <div className="livetv-player-topbar">
               <span className="lock-icon">🔒</span>
               <span className="livetv-player-ch-name">{activeChannel.name}</span>
+              <button
+                className={`livetv-player-fav${isFavorite(activeChannel.id) ? ' active' : ''}`}
+                onClick={(e) => toggleFavorite(activeChannel, e)}
+                title={isFavorite(activeChannel.id) ? 'Remove from favorites' : 'Add to favorites'}
+              >
+                {isFavorite(activeChannel.id) ? '♥' : '♡'}
+              </button>
               <button className="livetv-player-close" onClick={closeChannel}>✕</button>
             </div>
 

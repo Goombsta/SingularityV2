@@ -58,18 +58,20 @@ export default function HomeScreen() {
 
   // Fetch trending: TMDB if key present, else IMDb RSS fallback
   useEffect(() => {
-    const tmdbKey = localStorage.getItem('tmdb_api_key') || ''
-    if (tmdbKey) {
-      invoke<TmdbTrendingItem[]>('fetch_tmdb_trending', { mediaType: 'movie', apiKey: tmdbKey })
-        .then(setTmdbTrendingMovies).catch(() => {})
-      invoke<TmdbTrendingItem[]>('fetch_tmdb_trending', { mediaType: 'tv', apiKey: tmdbKey })
-        .then(setTmdbTrendingTv).catch(() => {})
-    } else {
-      invoke<string[]>('fetch_imdb_trending', { mediaType: 'movie' })
-        .then(setImdbMovies).catch(() => {})
-      invoke<string[]>('fetch_imdb_trending', { mediaType: 'tv' })
-        .then(setImdbTv).catch(() => {})
-    }
+    ;(async () => {
+      const tmdbKey = await invoke<string | null>('get_credential', { key: 'tmdb_api_key' }).catch(() => null) || localStorage.getItem('tmdb_api_key') || ''
+      if (tmdbKey) {
+        invoke<TmdbTrendingItem[]>('fetch_tmdb_trending', { mediaType: 'movie', apiKey: tmdbKey })
+          .then(setTmdbTrendingMovies).catch(() => {})
+        invoke<TmdbTrendingItem[]>('fetch_tmdb_trending', { mediaType: 'tv', apiKey: tmdbKey })
+          .then(setTmdbTrendingTv).catch(() => {})
+      } else {
+        invoke<string[]>('fetch_imdb_trending', { mediaType: 'movie' })
+          .then(setImdbMovies).catch(() => {})
+        invoke<string[]>('fetch_imdb_trending', { mediaType: 'tv' })
+          .then(setImdbTv).catch(() => {})
+      }
+    })()
   }, [])
 
   // Trending: prefer TMDB weekly trending, fall back to IMDb RSS match.

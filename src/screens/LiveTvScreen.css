@@ -131,16 +131,37 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
+  text-align: left;
   padding: 9px 14px;
   font-size: 13px;
   font-weight: 500;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: color var(--transition);
+  border-radius: 12px;
+  border: none;
+  background: none;
+  transition: background var(--transition), color var(--transition);
   flex-shrink: 0;
 }
-.livetv-cat-favorites:hover { color: var(--text-primary); }
+.livetv-cat-favorites:hover { background: rgba(255,255,255,0.07); color: var(--text-primary); }
+.livetv-cat-favorites.active {
+  background: rgba(226, 85, 85, 0.15);
+  color: #e25555;
+}
 .heart-icon { color: #e25555; font-size: 14px; }
+
+.livetv-fav-count {
+  margin-left: auto;
+  background: #e25555;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 10px;
+  padding: 1px 6px;
+  min-width: 18px;
+  text-align: center;
+}
 
 .livetv-cat-label {
   padding: 10px 14px 4px;
@@ -229,8 +250,38 @@
   margin-bottom: 8px;
   background: rgba(255,255,255,0.04);
   border-radius: 6px;
-  overflow: hidden;
+  overflow: visible;
+  position: relative;
 }
+
+/* Heart button on channel card — shown on hover, always shown when active */
+.livetv-ch-fav {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(15, 15, 30, 0.85);
+  border: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s, background 0.15s;
+  z-index: 2;
+}
+.livetv-ch-card:hover .livetv-ch-fav { opacity: 1; }
+.livetv-ch-fav.active {
+  opacity: 1;
+  color: #e25555;
+  background: rgba(226, 85, 85, 0.18);
+}
+.livetv-ch-fav:hover { color: #e25555; background: rgba(226, 85, 85, 0.25); }
 
 .livetv-ch-logo {
   max-width: 100%;
@@ -348,6 +399,26 @@
   transition: background var(--transition), color var(--transition);
 }
 .livetv-player-close:hover { background: rgba(255,255,255,0.1); color: var(--text-primary); }
+
+/* Heart button in player topbar */
+.livetv-player-fav {
+  color: var(--text-secondary);
+  font-size: 18px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: none;
+  background: none;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.livetv-player-fav:hover { color: #e25555; background: rgba(226, 85, 85, 0.15); }
+.livetv-player-fav.active { color: #e25555; }
 
 .livetv-video-wrap {
   position: absolute;

@@ -45,15 +45,16 @@ export default function HeroBanner({ items, onSelect }: HeroBannerProps) {
     const idx = Math.min(activeIdx, items.length - 1)
     if (items.length === 0) return
     const item = items[idx]
-    const apiKey = localStorage.getItem('tmdb_api_key') || ''
-    if (!apiKey) { setTmdbData(null); return }
-    const cleanName = extractBaseTitle(item.name) || item.name
-    const cacheKey = cleanName + (item.year?.slice(0, 4) ?? '')
-    if (fetchingFor.current === cacheKey) return
-    fetchingFor.current = cacheKey
-    setTmdbData(null)
-    const isVod = 'stream_url' in item
-    invoke<{
+    ;(async () => {
+      const apiKey = await invoke<string | null>('get_credential', { key: 'tmdb_api_key' }).catch(() => null) || localStorage.getItem('tmdb_api_key') || ''
+      if (!apiKey) { setTmdbData(null); return }
+      const cleanName = extractBaseTitle(item.name) || item.name
+      const cacheKey = cleanName + (item.year?.slice(0, 4) ?? '')
+      if (fetchingFor.current === cacheKey) return
+      fetchingFor.current = cacheKey
+      setTmdbData(null)
+      const isVod = 'stream_url' in item
+      invoke<{
       backdropUrl?: string; overview: string; tagline: string
       voteAverage: number; genres: string[]; runtimeMins?: number; releaseDate: string
     }>('fetch_tmdb', {
@@ -66,6 +67,7 @@ export default function HeroBanner({ items, onSelect }: HeroBannerProps) {
         setTmdbData({ backdropUrl: d.backdropUrl, overview: d.overview, tagline: d.tagline, voteAverage: d.voteAverage, genres: d.genres, runtimeMins: d.runtimeMins, releaseDate: d.releaseDate })
       }
     }).catch(() => { if (fetchingFor.current === cacheKey) setTmdbData(null) })
+    })()
   }, [activeIdx, items])
 
   if (items.length === 0) return null

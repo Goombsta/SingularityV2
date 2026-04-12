@@ -49,14 +49,16 @@ export default function VodScreen() {
   }, [activePlaylistId, fetchVod])
 
   useEffect(() => {
-    const tmdbKey = localStorage.getItem('tmdb_api_key') || ''
-    if (tmdbKey) {
-      invoke<{ title: string }[]>('fetch_tmdb_trending', { mediaType: 'movie', apiKey: tmdbKey })
-        .then(setTmdbTrendingMovies).catch(() => {})
-    } else {
-      invoke<string[]>('fetch_imdb_trending', { mediaType: 'movie' })
-        .then(setImdbMovies).catch(() => {})
-    }
+    ;(async () => {
+      const tmdbKey = await invoke<string | null>('get_credential', { key: 'tmdb_api_key' }).catch(() => null) || localStorage.getItem('tmdb_api_key') || ''
+      if (tmdbKey) {
+        invoke<{ title: string }[]>('fetch_tmdb_trending', { mediaType: 'movie', apiKey: tmdbKey })
+          .then(setTmdbTrendingMovies).catch(() => {})
+      } else {
+        invoke<string[]>('fetch_imdb_trending', { mediaType: 'movie' })
+          .then(setImdbMovies).catch(() => {})
+      }
+    })()
   }, [])
 
   useEffect(() => {
@@ -70,7 +72,7 @@ export default function VodScreen() {
   const fetchMeta = async (name: string, year?: string) => {
     setTmdb(null)
     setOmdb(null)
-    const tmdbKey = localStorage.getItem('tmdb_api_key') || ''
+    const tmdbKey = await invoke<string | null>('get_credential', { key: 'tmdb_api_key' }).catch(() => null) || localStorage.getItem('tmdb_api_key') || ''
     if (tmdbKey) {
       try {
         const meta = await invoke<TmdbMeta>('fetch_tmdb', {
@@ -80,7 +82,7 @@ export default function VodScreen() {
         return
       } catch { /* fall through to OMDb */ }
     }
-    const omdbKey = localStorage.getItem('omdb_api_key') || ''
+    const omdbKey = await invoke<string | null>('get_credential', { key: 'omdb_api_key' }).catch(() => null) || localStorage.getItem('omdb_api_key') || ''
     if (omdbKey) {
       try {
         const meta = await invoke<OmdbMeta>('fetch_omdb', { title: name, year: year ?? null, apiKey: omdbKey })
