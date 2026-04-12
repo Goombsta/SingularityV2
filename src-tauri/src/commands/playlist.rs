@@ -112,6 +112,7 @@ pub async fn update_playlist(
     app: AppHandle,
     id: String,
     name: Option<String>,
+    url: Option<String>,
     expiry: Option<String>,
 ) -> CmdResult<Playlist> {
     let mut guard = state.playlists.lock().unwrap();
@@ -123,6 +124,12 @@ pub async fn update_playlist(
         let trimmed = n.trim().to_string();
         if !trimmed.is_empty() {
             playlist.name = trimmed;
+        }
+    }
+    if let Some(u) = url {
+        let trimmed = u.trim().to_string();
+        if !trimmed.is_empty() {
+            playlist.url = trimmed;
         }
     }
     // Pass Some("") to clear expiry, Some("date") to set it, None to leave unchanged
@@ -163,9 +170,15 @@ pub async fn fetch_live_channels(
             client.get_live_streams(&playlist_id).await.map_err(err)
         }
         PlaylistType::M3u => {
-            let (channels, _) = m3u::parse_m3u(&playlist.url, &playlist_id)
+            let (channels, vods) = m3u::parse_m3u(&playlist.url, &playlist_id)
                 .await
                 .map_err(err)?;
+            if channels.is_empty() && !vods.is_empty() {
+                return Err(format!(
+                    "No live channels found, but {} VOD items were detected. This looks like a Movies/VOD playlist — browse it under Movies instead.",
+                    vods.len()
+                ));
+            }
             Ok(channels)
         }
         PlaylistType::Stalker => {

@@ -79,8 +79,8 @@ function PlaylistSettings({ addMode, setAddMode }: {
             {editingId === p.id ? (
               <PlaylistEditForm
                 playlist={p}
-                onSave={async (name, expiry) => {
-                  await updatePlaylist(p.id, name, expiry)
+                onSave={async (name, url, expiry) => {
+                  await updatePlaylist(p.id, name, url, expiry)
                   setEditingId(null)
                 }}
                 onCancel={() => setEditingId(null)}
@@ -136,15 +136,16 @@ function PlaylistSettings({ addMode, setAddMode }: {
 
 function PlaylistEditForm({
   playlist, onSave, onCancel,
-}: { playlist: Playlist; onSave: (name: string, expiry: string) => Promise<void>; onCancel: () => void }) {
+}: { playlist: Playlist; onSave: (name: string, url: string, expiry: string) => Promise<void>; onCancel: () => void }) {
   const [name, setName] = useState(playlist.name)
+  const [url, setUrl] = useState(playlist.url)
   const [expiry, setExpiry] = useState(playlist.expiry ?? '')
   const [saving, setSaving] = useState(false)
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
     setSaving(true)
-    await onSave(name, expiry)
+    await onSave(name, url, expiry)
     setSaving(false)
   }
 
@@ -157,6 +158,16 @@ function PlaylistEditForm({
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Playlist name"
+          required
+        />
+      </div>
+      <div className="playlist-edit-row">
+        <label className="playlist-edit-label">URL</label>
+        <input
+          className="form-input"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder="Playlist URL"
           required
         />
       </div>

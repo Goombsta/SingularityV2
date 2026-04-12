@@ -8,7 +8,7 @@ import type { Channel } from '../types'
 import './LiveTvScreen.css'
 
 export default function LiveTvScreen() {
-  const { activePlaylistId, channels, fetchChannels, status } = usePlaylistStore()
+  const { activePlaylistId, channels, fetchChannels, status, error } = usePlaylistStore()
   const { getNowAndNext } = useEpgStore()
 
   const [activeGroup, setActiveGroup] = useState<string>('ALL')
@@ -324,6 +324,17 @@ export default function LiveTvScreen() {
       <section className="livetv-grid-panel">
         {status === 'loading' ? (
           <div className="livetv-loading">Loading channels…</div>
+        ) : status === 'error' ? (
+          <div className="livetv-empty">
+            <p className="livetv-empty-title">Failed to load channels</p>
+            <p className="livetv-empty-detail">{error}</p>
+            <button className="livetv-retry-btn" onClick={() => activePlaylistId && fetchChannels(activePlaylistId, true)}>Retry</button>
+          </div>
+        ) : channels.length === 0 ? (
+          <div className="livetv-empty">
+            <p className="livetv-empty-title">No channels found</p>
+            <p className="livetv-empty-detail">The playlist loaded but contained no live channels.</p>
+          </div>
         ) : (
           <div className="livetv-channel-grid">
             {filtered.map((ch) => {

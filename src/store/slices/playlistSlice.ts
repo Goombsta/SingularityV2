@@ -22,11 +22,11 @@ interface PlaylistIntents {
   addXtream: (name: string, url: string, username: string, password: string) => Promise<void>
   addM3u: (name: string, url: string) => Promise<void>
   addStalker: (name: string, url: string, mac: string) => Promise<void>
-  updatePlaylist: (id: string, name?: string, expiry?: string) => Promise<void>
+  updatePlaylist: (id: string, name?: string, url?: string, expiry?: string) => Promise<void>
   refreshPlaylistExpiry: (id: string) => Promise<void>
   removePlaylist: (id: string) => Promise<void>
   setActivePlaylist: (id: string) => void
-  fetchChannels: (playlistId: string) => Promise<void>
+  fetchChannels: (playlistId: string, force?: boolean) => Promise<void>
   fetchVod: (playlistId: string) => Promise<void>
   fetchSeries: (playlistId: string) => Promise<void>
   fetchSeriesInfo: (playlistId: string, seriesId: number) => Promise<SeriesInfo>
@@ -96,8 +96,8 @@ export const usePlaylistStore = create<PlaylistState & PlaylistIntents>((set, ge
     }
   },
 
-  updatePlaylist: async (id, name, expiry) => {
-    const updated = await invoke<Playlist>('update_playlist', { id, name, expiry })
+  updatePlaylist: async (id, name, url, expiry) => {
+    const updated = await invoke<Playlist>('update_playlist', { id, name, url, expiry })
     set((s) => ({
       playlists: s.playlists.map((p) => (p.id === id ? updated : p)),
     }))
@@ -123,9 +123,9 @@ export const usePlaylistStore = create<PlaylistState & PlaylistIntents>((set, ge
 
   setActivePlaylist: (id) => set({ activePlaylistId: id }),
 
-  fetchChannels: async (playlistId) => {
-    if (get().channelsLoadedFor === playlistId) return
-    set({ status: 'loading', error: null })
+  fetchChannels: async (playlistId, force) => {
+    if (!force && get().channelsLoadedFor === playlistId) return
+    set({ status: 'loading', error: null, channelsLoadedFor: null })
     try {
       const channels = await invoke<Channel[]>('fetch_live_channels', { playlistId })
       set({ channels, status: 'idle', channelsLoadedFor: playlistId })

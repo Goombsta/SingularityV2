@@ -4,7 +4,12 @@ use anyhow::{Context, Result};
 /// Parse an IPTV-style M3U playlist (not HLS — EXTINF with tvg-* attributes)
 pub async fn parse_m3u(source: &str, playlist_id: &str) -> Result<(Vec<Channel>, Vec<VodItem>)> {
     let content = if source.starts_with("http://") || source.starts_with("https://") {
-        reqwest::get(source)
+        reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(60))
+            .build()
+            .context("Failed to build HTTP client")?
+            .get(source)
+            .send()
             .await
             .context("Failed to fetch M3U URL")?
             .text()
@@ -88,6 +93,18 @@ fn parse_m3u_content(content: &str, playlist_id: &str) -> Result<(Vec<Channel>, 
                     });
                 }
             }
+        }
+    }
+
+    // Diagnostic: nothing found at all — response probably isn't an M3U
+    if channels.is_empty() && vods.is_empty() {
+        if !content.contains("#EXTINF") {
+            let preview: String = content.chars().take(120).collect::<String>()
+                .replace('\n', " ").replace('\r', "");
+            return Err(anyhow::anyhow!(
+                "No #EXTINF entries found. Response may not be an M3U playlist. Preview: \"{}\"",
+                preview
+            ));
         }
     }
 
