@@ -10,6 +10,7 @@ import SettingsScreen from './screens/SettingsScreen'
 import PlayerScreen from './screens/PlayerScreen'
 import MultiviewScreen from './screens/MultiviewScreen'
 import EpgScreen from './screens/EpgScreen'
+import LoginScreen from './screens/LoginScreen'
 
 export const router = createBrowserRouter([
   {
@@ -28,4 +29,5 @@ export const router = createBrowserRouter([
     ],
   },
   { path: '/player', element: <PlayerScreen /> },
+  { path: '/login', element: <LoginScreen /> },
 ])

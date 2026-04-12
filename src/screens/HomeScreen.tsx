@@ -72,45 +72,113 @@ export default function HomeScreen() {
     }
   }, [])
 
-  // Trending: prefer TMDB weekly trending, fall back to IMDb RSS match
+  // Trending: prefer TMDB weekly trending, fall back to IMDb RSS match.
+  // When TMDB data is available, enrich matched items with TMDB poster/backdrop
+  // so both the hero banner and carousel show consistent TMDB artwork.
   const trendingMovies = useMemo(() => {
-    const titleList = tmdbTrendingMovies.length > 0
-      ? tmdbTrendingMovies.map((t) => t.title)
-      : imdbMovies
-    if (titleList.length === 0)
-      return [...vods].sort((a, b) => parseFloat(b.rating || '0') - parseFloat(a.rating || '0')).slice(0, 30)
-    const used = new Set<string>()
-    const result: typeof vods = []
-    for (const trendTitle of titleList) {
-      const t = (extractBaseTitle(trendTitle) || trendTitle).toLowerCase()
-      const match = vods.find((v) => {
-        if (used.has(v.id)) return false
-        const n = (extractBaseTitle(v.name) || v.name).toLowerCase()
-        return n === t || n.includes(t) || t.includes(n)
-      })
-      if (match) { used.add(match.id); result.push(match) }
+    if (tmdbTrendingMovies.length > 0) {
+      const used = new Set<string>()
+      const result: VodItem[] = []
+      for (const tmdb of tmdbTrendingMovies) {
+        const t = (extractBaseTitle(tmdb.title) || tmdb.title).toLowerCase()
+        const match = vods.find((v) => {
+          if (used.has(v.id)) return false
+          const n = (extractBaseTitle(v.name) || v.name).toLowerCase()
+          return n === t || n.includes(t) || t.includes(n)
+        })
+        if (match) {
+          used.add(match.id)
+          result.push({
+            ...match,
+            poster: tmdb.posterUrl || match.poster,
+            backdrop: tmdb.backdropUrl || match.backdrop,
+            rating: tmdb.voteAverage ? String(tmdb.voteAverage) : match.rating,
+          })
+        } else {
+          // Show TMDB trending item even without a local catalog match
+          result.push({
+            id: `tmdb-movie-${tmdb.tmdbId}`,
+            name: tmdb.title,
+            stream_url: '',
+            poster: tmdb.posterUrl,
+            backdrop: tmdb.backdropUrl,
+            plot: tmdb.overview,
+            rating: tmdb.voteAverage ? String(tmdb.voteAverage) : undefined,
+            year: tmdb.releaseDate?.slice(0, 4),
+            playlist_id: '',
+            stream_id: undefined,
+          } as VodItem)
+        }
+      }
+      return result
     }
-    return result
+    // IMDb RSS fallback
+    if (imdbMovies.length > 0) {
+      const used = new Set<string>()
+      const result: VodItem[] = []
+      for (const trendTitle of imdbMovies) {
+        const t = (extractBaseTitle(trendTitle) || trendTitle).toLowerCase()
+        const match = vods.find((v) => {
+          if (used.has(v.id)) return false
+          const n = (extractBaseTitle(v.name) || v.name).toLowerCase()
+          return n === t || n.includes(t) || t.includes(n)
+        })
+        if (match) { used.add(match.id); result.push(match) }
+      }
+      return result
+    }
+    return [...vods].sort((a, b) => parseFloat(b.rating || '0') - parseFloat(a.rating || '0')).slice(0, 30)
   }, [vods, tmdbTrendingMovies, imdbMovies])
 
   const trendingSeries = useMemo(() => {
-    const titleList = tmdbTrendingTv.length > 0
-      ? tmdbTrendingTv.map((t) => t.title)
-      : imdbTv
-    if (titleList.length === 0)
-      return [...series].sort((a, b) => parseFloat(b.rating || '0') - parseFloat(a.rating || '0')).slice(0, 30)
-    const used = new Set<string>()
-    const result: typeof series = []
-    for (const trendTitle of titleList) {
-      const t = (extractBaseTitle(trendTitle) || trendTitle).toLowerCase()
-      const match = series.find((s) => {
-        if (used.has(s.id)) return false
-        const n = (extractBaseTitle(s.name) || s.name).toLowerCase()
-        return n === t || n.includes(t) || t.includes(n)
-      })
-      if (match) { used.add(match.id); result.push(match) }
+    if (tmdbTrendingTv.length > 0) {
+      const used = new Set<string>()
+      const result: Series[] = []
+      for (const tmdb of tmdbTrendingTv) {
+        const t = (extractBaseTitle(tmdb.title) || tmdb.title).toLowerCase()
+        const match = series.find((s) => {
+          if (used.has(s.id)) return false
+          const n = (extractBaseTitle(s.name) || s.name).toLowerCase()
+          return n === t || n.includes(t) || t.includes(n)
+        })
+        if (match) {
+          used.add(match.id)
+          result.push({
+            ...match,
+            poster: tmdb.posterUrl || match.poster,
+            backdrop: tmdb.backdropUrl || match.backdrop,
+            rating: tmdb.voteAverage ? String(tmdb.voteAverage) : match.rating,
+          })
+        } else {
+          result.push({
+            id: `tmdb-tv-${tmdb.tmdbId}`,
+            name: tmdb.title,
+            poster: tmdb.posterUrl,
+            backdrop: tmdb.backdropUrl,
+            plot: tmdb.overview,
+            rating: tmdb.voteAverage ? String(tmdb.voteAverage) : undefined,
+            year: tmdb.releaseDate?.slice(0, 4),
+            playlist_id: '',
+          } as Series)
+        }
+      }
+      return result
     }
-    return result
+    if (imdbTv.length > 0) {
+      const used = new Set<string>()
+      const result: Series[] = []
+      for (const trendTitle of imdbTv) {
+        const t = (extractBaseTitle(trendTitle) || trendTitle).toLowerCase()
+        const match = series.find((s) => {
+          if (used.has(s.id)) return false
+          const n = (extractBaseTitle(s.name) || s.name).toLowerCase()
+          return n === t || n.includes(t) || t.includes(n)
+        })
+        if (match) { used.add(match.id); result.push(match) }
+      }
+      return result
+    }
+    return [...series].sort((a, b) => parseFloat(b.rating || '0') - parseFloat(a.rating || '0')).slice(0, 30)
   }, [series, tmdbTrendingTv, imdbTv])
 
   // Hero items: first 5 from Trending Now — TMDB will supply HD backdrops for each

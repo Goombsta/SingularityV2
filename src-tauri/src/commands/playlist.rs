@@ -22,10 +22,12 @@ pub async fn add_xtream_playlist(
     password: String,
 ) -> CmdResult<Playlist> {
     let client = XtreamClient::new(&url, &username, &password);
-    client
-        .get_live_streams("test")
-        .await
-        .map_err(|e| format!("Failed to connect: {}", e))?;
+    // Validate credentials and fetch expiry in parallel
+    let (live_check, expiry) = tokio::join!(
+        client.get_live_streams("test"),
+        client.get_expiry_date()
+    );
+    live_check.map_err(|e| format!("Failed to connect: {}", e))?;
 
     let playlist = Playlist {
         id: Uuid::new_v4().to_string(),
@@ -35,6 +37,7 @@ pub async fn add_xtream_playlist(
         username: Some(username),
         password: Some(password),
         mac: None,
+        expiry,
     };
 
     let mut guard = state.playlists.lock().unwrap();
@@ -58,6 +61,7 @@ pub async fn add_m3u_playlist(
         username: None,
         password: None,
         mac: None,
+        expiry: None,
     };
 
     let mut guard = state.playlists.lock().unwrap();
@@ -88,6 +92,7 @@ pub async fn add_stalker_playlist(
         username: None,
         password: None,
         mac: Some(mac),
+        expiry: None,
     };
 
     let mut guard = state.playlists.lock().unwrap();
@@ -99,6 +104,34 @@ pub async fn add_stalker_playlist(
 #[tauri::command]
 pub async fn list_playlists(state: State<'_, PlaylistStore>) -> CmdResult<Vec<Playlist>> {
     Ok(state.playlists.lock().unwrap().clone())
+}
+
+#[tauri::command]
+pub async fn update_playlist(
+    state: State<'_, PlaylistStore>,
+    app: AppHandle,
+    id: String,
+    name: Option<String>,
+    expiry: Option<String>,
+) -> CmdResult<Playlist> {
+    let mut guard = state.playlists.lock().unwrap();
+    let playlist = guard
+        .iter_mut()
+        .find(|p| p.id == id)
+        .ok_or_else(|| format!("Playlist '{}' not found", id))?;
+    if let Some(n) = name {
+        let trimmed = n.trim().to_string();
+        if !trimmed.is_empty() {
+            playlist.name = trimmed;
+        }
+    }
+    // Pass Some("") to clear expiry, Some("date") to set it, None to leave unchanged
+    if let Some(e) = expiry {
+        playlist.expiry = if e.trim().is_empty() { None } else { Some(e.trim().to_string()) };
+    }
+    let updated = playlist.clone();
+    persist::save(&app, "playlists.json", &*guard);
+    Ok(updated)
 }
 
 #[tauri::command]
@@ -213,6 +246,31 @@ pub async fn fetch_series_info(
         }
         _ => Err("Series info only available for Xtream playlists".into()),
     }
+}
+
+#[tauri::command]
+pub async fn refresh_playlist_expiry(
+    state: State<'_, PlaylistStore>,
+    app: AppHandle,
+    id: String,
+) -> CmdResult<Playlist> {
+    let playlist = find_playlist(&state, &id)?;
+    if playlist.playlist_type != PlaylistType::Xtream {
+        return Err("Expiry refresh is only available for Xtream playlists".into());
+    }
+    let client = XtreamClient::new(
+        &playlist.url,
+        playlist.username.as_deref().unwrap_or(""),
+        playlist.password.as_deref().unwrap_or(""),
+    );
+    let expiry = client.get_expiry_date().await;
+    let mut guard = state.playlists.lock().unwrap();
+    let p = guard.iter_mut().find(|p| p.id == id)
+        .ok_or_else(|| format!("Playlist '{}' not found", id))?;
+    p.expiry = expiry;
+    let updated = p.clone();
+    persist::save(&app, "playlists.json", &*guard);
+    Ok(updated)
 }
 
 fn find_playlist(state: &PlaylistStore, id: &str) -> CmdResult<Playlist> {

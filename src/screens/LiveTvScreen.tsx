@@ -29,6 +29,34 @@ export default function LiveTvScreen() {
   const [duration, setDuration] = useState(0)
   const [volume, setVolume] = useState(1)
   const [showVol, setShowVol] = useState(false)
+  const [showTechStats, setShowTechStats] = useState(false)
+  const [techStats, setTechStats] = useState({
+    resolution: '—', codec: '—', fps: '—', bitrate: '—',
+    buffer: '—', droppedFrames: '—',
+    audioCodec: '—', audioChannels: '—',
+  })
+
+  // Poll tech stats when panel is open
+  useEffect(() => {
+    if (!showTechStats || !videoRef.current) return
+    let cancelled = false
+    function pollStats() {
+      const v = videoRef.current
+      if (!v || cancelled) return
+      const vq = (v as unknown as { getVideoPlaybackQuality?: () => { droppedVideoFrames: number } }).getVideoPlaybackQuality?.()
+      const dropped = vq ? vq.droppedVideoFrames : 0
+      const w = v.videoWidth, h = v.videoHeight
+      setTechStats(prev => ({
+        ...prev,
+        resolution: w > 0 ? `${w}×${h}` : '—',
+        buffer: v.buffered.length > 0 ? `${(v.buffered.end(v.buffered.length - 1) - v.currentTime).toFixed(1)}s` : '—',
+        droppedFrames: String(dropped),
+      }))
+    }
+    pollStats()
+    const id = setInterval(pollStats, 1500)
+    return () => { cancelled = true; clearInterval(id) }
+  }, [showTechStats, activeChannel])
 
   useEffect(() => {
     if (activePlaylistId) fetchChannels(activePlaylistId)
@@ -190,9 +218,10 @@ export default function LiveTvScreen() {
       // Explicit .m3u8 — HLS.js, fall back to native (Safari/iOS)
       tryHls(url, () => tryNative())
     } else if (isExplicitTs) {
-      // Explicit .ts — Xtream serves raw MPEG-TS here; go straight to mpegts.js
-      // (skipping a .m3u8 HLS attempt avoids a 10s timeout before the real player starts)
-      tryMpegts()
+      // Explicit .ts — try HLS first with .m3u8 variant (works on Android WebView + Desktop),
+      // fall back to mpegts.js, then native
+      const hlsVariant = url.replace(/\.ts(\?|$)/i, '.m3u8$1')
+      tryHls(hlsVariant, () => tryMpegts())
     } else {
       // Extensionless Xtream live URL — try HLS.js first, then mpegts, then native
       tryHls(url, () => tryMpegts())
@@ -348,6 +377,27 @@ export default function LiveTvScreen() {
               />
             </div>
 
+            {/* Tech Stats overlay */}
+            {showTechStats && (
+              <div className="livetv-tech-stats-panel">
+                <div className="livetv-ts-header">
+                  <span className="livetv-ts-title">Tech Stats</span>
+                  <button className="livetv-ts-close" onClick={() => setShowTechStats(false)}>✕</button>
+                </div>
+                <div className="livetv-ts-section">VIDEO</div>
+                <div className="livetv-ts-row"><span>RESOLUTION</span><span className="ts-val ts-orange">{techStats.resolution}</span></div>
+                <div className="livetv-ts-row"><span>CODEC</span><span className="ts-val">{techStats.codec}</span></div>
+                <div className="livetv-ts-row"><span>FPS</span><span className="ts-val">{techStats.fps}</span></div>
+                <div className="livetv-ts-row"><span>BITRATE</span><span className="ts-val">{techStats.bitrate}</span></div>
+                <div className="livetv-ts-section">AUDIO</div>
+                <div className="livetv-ts-row"><span>CODEC</span><span className="ts-val">{techStats.audioCodec}</span></div>
+                <div className="livetv-ts-row"><span>CHANNELS</span><span className="ts-val">{techStats.audioChannels}</span></div>
+                <div className="livetv-ts-section">NETWORK</div>
+                <div className="livetv-ts-row"><span>BUFFER</span><span className={`ts-val ${parseFloat(techStats.buffer) < 2 ? 'ts-red' : 'ts-orange'}`}>{techStats.buffer}</span></div>
+                <div className="livetv-ts-row"><span>DROPPED FRAMES</span><span className={`ts-val ${techStats.droppedFrames !== '0' ? 'ts-red' : 'ts-green'}`}>{techStats.droppedFrames}</span></div>
+              </div>
+            )}
+
             {/* Controls + EPG — transparent gradient overlay at bottom */}
             <div className="livetv-controls">
               {/* EPG now-playing */}
@@ -412,6 +462,15 @@ export default function LiveTvScreen() {
                 </div>
 
                 <div className="livetv-ctrl-right">
+                  <button
+                    className={`livetv-ctrl-btn livetv-tech-stats-btn ${showTechStats ? 'active' : ''}`}
+                    onClick={() => setShowTechStats(v => !v)}
+                    title="Tech Stats"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+                      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                    </svg>
+                  </button>
                   <span className="livetv-quality-badge">TV Channels</span>
                   <button className="livetv-ctrl-btn" title="Fullscreen" onClick={() => {
                     const el = document.querySelector('.livetv-root') as HTMLElement

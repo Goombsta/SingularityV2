@@ -49,6 +49,8 @@ pub fn run() {
             commands::playlist::add_m3u_playlist,
             commands::playlist::add_stalker_playlist,
             commands::playlist::list_playlists,
+            commands::playlist::update_playlist,
+            commands::playlist::refresh_playlist_expiry,
             commands::playlist::remove_playlist,
             commands::playlist::fetch_live_channels,
             commands::playlist::fetch_vod,

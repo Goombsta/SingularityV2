@@ -22,6 +22,8 @@ interface PlaylistIntents {
   addXtream: (name: string, url: string, username: string, password: string) => Promise<void>
   addM3u: (name: string, url: string) => Promise<void>
   addStalker: (name: string, url: string, mac: string) => Promise<void>
+  updatePlaylist: (id: string, name?: string, expiry?: string) => Promise<void>
+  refreshPlaylistExpiry: (id: string) => Promise<void>
   removePlaylist: (id: string) => Promise<void>
   setActivePlaylist: (id: string) => void
   fetchChannels: (playlistId: string) => Promise<void>
@@ -92,6 +94,20 @@ export const usePlaylistStore = create<PlaylistState & PlaylistIntents>((set, ge
       set({ status: 'error', error: String(e) })
       throw e
     }
+  },
+
+  updatePlaylist: async (id, name, expiry) => {
+    const updated = await invoke<Playlist>('update_playlist', { id, name, expiry })
+    set((s) => ({
+      playlists: s.playlists.map((p) => (p.id === id ? updated : p)),
+    }))
+  },
+
+  refreshPlaylistExpiry: async (id) => {
+    const updated = await invoke<Playlist>('refresh_playlist_expiry', { id })
+    set((s) => ({
+      playlists: s.playlists.map((p) => (p.id === id ? updated : p)),
+    }))
   },
 
   removePlaylist: async (id) => {

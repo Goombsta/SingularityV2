@@ -488,3 +488,75 @@
 .livetv-player-empty p {
   font-size: 14px;
 }
+
+/* ── Tech Stats ── */
+.livetv-ctrl-btn.livetv-tech-stats-btn.active {
+  color: var(--accent-light, #a78bfa);
+  opacity: 1;
+}
+
+.livetv-tech-stats-panel {
+  position: absolute;
+  top: 50px;
+  right: 16px;
+  width: 280px;
+  background: rgba(8, 8, 12, 0.92);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 0 0 10px;
+  z-index: 25;
+  font-size: 12px;
+  user-select: none;
+}
+
+.livetv-ts-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.livetv-ts-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.livetv-ts-close {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.45);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  transition: color 0.15s;
+}
+.livetv-ts-close:hover { color: rgba(255,255,255,0.8); }
+
+.livetv-ts-section {
+  padding: 8px 14px 3px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #8b5cf6;
+  text-transform: uppercase;
+}
+
+.livetv-ts-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3px 14px;
+  gap: 12px;
+}
+
+.livetv-ts-row > span:first-child {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}

@@ -21,6 +21,9 @@ pub struct Playlist {
     pub password: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mac: Option<String>,
+    /// ISO-8601 date string (e.g. "2025-12-31"). None = no expiry set.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expiry: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

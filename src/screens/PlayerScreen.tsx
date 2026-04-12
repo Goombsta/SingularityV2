@@ -333,7 +333,7 @@ export default function PlayerScreen() {
       })
     }
 
-    function startHls(onFatalFallback?: () => void) {
+    function startHls(onFatalFallback?: () => void, sourceUrl?: string) {
       const hls = new Hls({
         enableWorker: true,
         lowLatencyMode: false,
@@ -342,7 +342,7 @@ export default function PlayerScreen() {
         maxMaxBufferLength: isLive ? 60 : 120,
       })
       hlsRef.current = hls
-      hls.loadSource(url)
+      hls.loadSource(sourceUrl ?? url)
       hls.attachMedia(video)
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         // Start muted to satisfy Android autoplay policy, unmute once playing
@@ -373,8 +373,14 @@ export default function PlayerScreen() {
         startMpegTs()
       }
     } else if (isMpegTs) {
-      // Explicit .ts URL — try MPEG-TS player, fall back to native <video src>
-      startMpegTs()
+      // Explicit .ts URL — try HLS first with .m3u8 variant (works on Android WebView + Desktop),
+      // fall back to MPEG-TS player, then native
+      const hlsVariant = url.replace(/\.ts(\?|$)/i, '.m3u8$1')
+      if (Hls.isSupported()) {
+        startHls(() => startMpegTs(), hlsVariant)
+      } else {
+        startMpegTs()
+      }
     }
 
     return () => {

@@ -8,6 +8,7 @@ export interface Playlist {
   username?: string
   password?: string
   mac?: string
+  expiry?: string
 }
 
 export interface Channel {

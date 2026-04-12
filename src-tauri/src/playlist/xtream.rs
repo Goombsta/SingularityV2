@@ -42,6 +42,40 @@ impl XtreamClient {
         )
     }
 
+    /// Fetch account expiry date from the provider.
+    /// Returns an ISO-8601 date string (e.g. "2025-12-31") or None if not available.
+    pub async fn get_expiry_date(&self) -> Option<String> {
+        #[derive(Deserialize)]
+        struct UserInfo {
+            exp_date: Option<serde_json::Value>,
+        }
+        #[derive(Deserialize)]
+        struct ApiRoot {
+            user_info: Option<UserInfo>,
+        }
+        let url = format!(
+            "{}/player_api.php?username={}&password={}",
+            self.url, self.username, self.password
+        );
+        let root: ApiRoot = self.client.get(&url).send().await.ok()?.json().await.ok()?;
+        let exp = root.user_info?.exp_date?;
+        // exp_date may be a Unix timestamp (string or number) or null
+        let ts: i64 = match &exp {
+            serde_json::Value::String(s) => s.trim().parse().ok()?,
+            serde_json::Value::Number(n) => n.as_i64()?,
+            _ => return None,
+        };
+        if ts <= 0 { return None; }
+        // Convert Unix timestamp → YYYY-MM-DD
+        use std::time::{Duration, UNIX_EPOCH};
+        let dt = UNIX_EPOCH + Duration::from_secs(ts as u64);
+        let secs = dt.duration_since(UNIX_EPOCH).ok()?.as_secs();
+        // Simple day calculation (no external crate needed)
+        let days = secs / 86400;
+        let (y, m, d) = days_to_ymd(days);
+        Some(format!("{:04}-{:02}-{:02}", y, m, d))
+    }
+
     /// Generic helper: fetch any category list by action name → id→name map
     async fn get_categories(&self, action: &str) -> Result<std::collections::HashMap<String, String>> {
         #[derive(Deserialize)]
@@ -127,7 +161,7 @@ impl XtreamClient {
                     id: uuid::Uuid::new_v4().to_string(),
                     name,
                     stream_url: format!(
-                        "{}/{}/{}/{}.ts",
+                        "{}/live/{}/{}/{}.m3u8",
                         self.url, self.username, self.password, stream_id
                     ),
                     logo: s.stream_icon,
@@ -373,4 +407,19 @@ impl XtreamClient {
 
         Ok(SeriesInfo { series, seasons })
     }
+}
+
+/// Convert days-since-epoch to (year, month, day).
+fn days_to_ymd(mut days: u64) -> (u32, u32, u32) {
+    days += 719468; // shift epoch to 1 Mar 0000
+    let era = days / 146097;
+    let doe = days % 146097;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+    (y as u32, m as u32, d as u32)
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Outlet } from 'react-router-dom'
+import { Outlet, useNavigate } from 'react-router-dom'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { platform } from '@tauri-apps/plugin-os'
 import { usePlaylistStore } from '../../store/slices/playlistSlice'
@@ -24,8 +24,10 @@ function getIsAndroid(): boolean {
 let splashDismissed = false
 
 export default function MainLayout() {
+  const navigate = useNavigate()
   const loadPlaylists = usePlaylistStore((s) => s.loadPlaylists)
   const playlistsLoaded = usePlaylistStore((s) => s.playlistsLoaded)
+  const playlists = usePlaylistStore((s) => s.playlists)
   const vods = usePlaylistStore((s) => s.vods)
   const series = usePlaylistStore((s) => s.series)
   const loadFavorites = useUiStore((s) => s.loadFavorites)
@@ -60,6 +62,13 @@ export default function MainLayout() {
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [vods, series])
+
+  // Redirect to login if no playlists exist after loading
+  useEffect(() => {
+    if (playlistsLoaded && playlists.length === 0) {
+      navigate('/login', { replace: true })
+    }
+  }, [playlistsLoaded, playlists.length, navigate])
 
   useEffect(() => {
     if (!playlistsLoaded) return

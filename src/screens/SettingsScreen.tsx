@@ -2,10 +2,22 @@ import { useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { usePlaylistStore } from '../store/slices/playlistSlice'
 import { useEpgStore } from '../store/slices/epgSlice'
+import type { Playlist } from '../types'
 import './SettingsScreen.css'
 
 type Tab = 'playlists' | 'epg' | 'integrations'
 type AddMode = 'xtream' | 'm3u' | 'stalker' | null
+
+function expiryLabel(expiry: string): { text: string; expired: boolean } {
+  const d = new Date(expiry)
+  if (isNaN(d.getTime())) return { text: expiry, expired: false }
+  const now = new Date()
+  const expired = d < now
+  return {
+    text: d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }),
+    expired,
+  }
+}
 
 export default function SettingsScreen() {
   const [tab, setTab] = useState<Tab>('playlists')
@@ -38,7 +50,9 @@ function PlaylistSettings({ addMode, setAddMode }: {
   addMode: AddMode
   setAddMode: (m: AddMode) => void
 }) {
-  const { playlists, removePlaylist, activePlaylistId, setActivePlaylist } = usePlaylistStore()
+  const { playlists, removePlaylist, updatePlaylist, refreshPlaylistExpiry, activePlaylistId, setActivePlaylist } = usePlaylistStore()
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [refreshingId, setRefreshingId] = useState<string | null>(null)
 
   return (
     <div className="settings-section">
@@ -62,26 +76,107 @@ function PlaylistSettings({ addMode, setAddMode }: {
         )}
         {playlists.map((p) => (
           <div key={p.id} className={`playlist-item ${p.id === activePlaylistId ? 'active' : ''}`}>
-            <div className="playlist-info">
-              <span className="playlist-type-badge">{p.type}</span>
-              <div>
-                <p className="playlist-name">{p.name}</p>
-                <p className="playlist-url truncate">{p.url}</p>
-              </div>
-            </div>
-            <div className="playlist-actions">
-              {p.id !== activePlaylistId && (
-                <button className="pl-btn" onClick={() => setActivePlaylist(p.id)}>Set active</button>
-              )}
-              {p.id === activePlaylistId && (
-                <span className="pl-active-badge">Active</span>
-              )}
-              <button className="pl-btn danger" onClick={() => removePlaylist(p.id)}>Remove</button>
-            </div>
+            {editingId === p.id ? (
+              <PlaylistEditForm
+                playlist={p}
+                onSave={async (name, expiry) => {
+                  await updatePlaylist(p.id, name, expiry)
+                  setEditingId(null)
+                }}
+                onCancel={() => setEditingId(null)}
+              />
+            ) : (
+              <>
+                <div className="playlist-info">
+                  <span className="playlist-type-badge">{p.type}</span>
+                  <div>
+                    <p className="playlist-name">{p.name}</p>
+                    <p className="playlist-url truncate">{p.url}</p>
+                    {p.expiry && (() => {
+                      const { text, expired } = expiryLabel(p.expiry)
+                      return (
+                        <p className={`playlist-expiry ${expired ? 'expired' : ''}`}>
+                          {expired ? '⚠ Expired' : 'Expires'}: {text}
+                        </p>
+                      )
+                    })()}
+                  </div>
+                </div>
+                <div className="playlist-actions">
+                  {p.id !== activePlaylistId && (
+                    <button className="pl-btn" onClick={() => setActivePlaylist(p.id)}>Set active</button>
+                  )}
+                  {p.id === activePlaylistId && (
+                    <span className="pl-active-badge">Active</span>
+                  )}
+                  <button className="pl-btn" onClick={() => setEditingId(p.id)}>Edit</button>
+                  {p.type === 'xtream' && (
+                    <button
+                      className="pl-btn"
+                      disabled={refreshingId === p.id}
+                      onClick={async () => {
+                        setRefreshingId(p.id)
+                        try { await refreshPlaylistExpiry(p.id) } catch {}
+                        setRefreshingId(null)
+                      }}
+                    >
+                      {refreshingId === p.id ? '…' : '↻ Expiry'}
+                    </button>
+                  )}
+                  <button className="pl-btn danger" onClick={() => removePlaylist(p.id)}>Remove</button>
+                </div>
+              </>
+            )}
           </div>
         ))}
       </div>
     </div>
+  )
+}
+
+function PlaylistEditForm({
+  playlist, onSave, onCancel,
+}: { playlist: Playlist; onSave: (name: string, expiry: string) => Promise<void>; onCancel: () => void }) {
+  const [name, setName] = useState(playlist.name)
+  const [expiry, setExpiry] = useState(playlist.expiry ?? '')
+  const [saving, setSaving] = useState(false)
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSaving(true)
+    await onSave(name, expiry)
+    setSaving(false)
+  }
+
+  return (
+    <form className="playlist-edit-form" onSubmit={handleSave}>
+      <div className="playlist-edit-row">
+        <label className="playlist-edit-label">Name</label>
+        <input
+          className="form-input"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Playlist name"
+          required
+        />
+      </div>
+      <div className="playlist-edit-row">
+        <label className="playlist-edit-label">Expiry date</label>
+        <input
+          className="form-input"
+          type="date"
+          value={expiry}
+          onChange={(e) => setExpiry(e.target.value)}
+          placeholder="No expiry"
+        />
+      </div>
+      <div className="form-actions">
+        <button type="button" className="form-btn cancel" onClick={onCancel}>Cancel</button>
+        <button type="submit" className="form-btn submit" disabled={saving}>
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+      </div>
+    </form>
   )
 }
 
