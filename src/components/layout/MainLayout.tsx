@@ -89,7 +89,7 @@ export default function MainLayout() {
         <div className={`splash-overlay${splashFading ? ' fading' : ''}`}>
           <div className="splash-logo-wrap">
             <span className="splash-eyebrow">Now Entering the</span>
-            <div className="splash-logo">SINGULARITY</div>
+            <div className="splash-logo">SINGULARITY DEUX</div>
           </div>
           <div className="splash-spinner" />
         </div>
@@ -97,7 +97,7 @@ export default function MainLayout() {
       {/* Windows-style title bar — hidden on Android */}
       {!isAndroidPlatform && (
         <div className="titlebar drag-region">
-          <span className="titlebar-title no-drag">Singularity</span>
+          <span className="titlebar-title no-drag">Singularity Deux</span>
           <div className="no-drag titlebar-controls">
             <button className="titlebar-btn minimize" onClick={() => win.minimize()} title="Minimize">
               <svg width="10" height="1" viewBox="0 0 10 1"><rect width="10" height="1" fill="currentColor"/></svg>

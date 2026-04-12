@@ -13,7 +13,16 @@ build/
 src-tauri/target/
 
 # ── Tauri Android generated project (re-generated via `tauri android init`) ───
-src-tauri/gen/android/
+# Build outputs and Gradle caches are ignored; source customisations are tracked.
+src-tauri/gen/android/.gradle/
+src-tauri/gen/android/app/build/
+src-tauri/gen/android/buildSrc/.gradle/
+src-tauri/gen/android/buildSrc/build/
+src-tauri/gen/android/gradle/
+src-tauri/gen/android/gradlew
+src-tauri/gen/android/gradlew.bat
+src-tauri/gen/android/local.properties
+src-tauri/gen/android/app/src/main/assets/
 
 # Keep Tauri ACL schemas (needed at build time, small JSON files)
 !src-tauri/gen/schemas/

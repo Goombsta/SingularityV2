@@ -46,7 +46,7 @@ export default function LoginScreen() {
   return (
     <div className="login-screen">
       <div className="login-card">
-        <div className="login-logo">SINGULARITY</div>
+        <div className="login-logo">SINGULARITY DEUX</div>
         <p className="login-subtitle">Add your playlist to get started</p>
 
         {/* Type selector */}
