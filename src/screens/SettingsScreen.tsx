@@ -1,11 +1,13 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import { getVersion } from '@tauri-apps/api/app'
+import { platform } from '@tauri-apps/plugin-os'
 import { usePlaylistStore } from '../store/slices/playlistSlice'
 import { useEpgStore } from '../store/slices/epgSlice'
 import type { Playlist } from '../types'
 import './SettingsScreen.css'
 
-type Tab = 'playlists' | 'epg' | 'integrations'
+type Tab = 'playlists' | 'epg' | 'integrations' | 'about'
 type AddMode = 'xtream' | 'm3u' | 'stalker' | null
 
 function expiryLabel(expiry: string): { text: string; expired: boolean } {
@@ -37,11 +39,15 @@ export default function SettingsScreen() {
         <button className={`settings-tab ${tab === 'integrations' ? 'active' : ''}`} onClick={() => setTab('integrations')}>
           Integrations
         </button>
+        <button className={`settings-tab ${tab === 'about' ? 'active' : ''}`} onClick={() => setTab('about')}>
+          About
+        </button>
       </div>
 
       {tab === 'playlists' && <PlaylistSettings addMode={addMode} setAddMode={setAddMode} />}
       {tab === 'epg' && <EpgSettings />}
       {tab === 'integrations' && <IntegrationsSettings />}
+      {tab === 'about' && <AboutSettings />}
     </div>
   )
 }
@@ -208,6 +214,9 @@ function AddXtreamForm({ onClose }: { onClose: () => void }) {
       <h3 className="form-title">Add Xtream Codes Playlist</h3>
       <input className="form-input" placeholder="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} required />
       <input className="form-input" placeholder="Server URL (http://...)" value={form.url} onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))} required />
+      {form.url.trim().toLowerCase().startsWith('http://') && (
+        <p className="form-http-warn">Your credentials will be sent unencrypted over HTTP. Use HTTPS if your provider supports it.</p>
+      )}
       <input className="form-input" placeholder="Username" value={form.username} onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))} required />
       <input className="form-input" placeholder="Password" type="password" value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} required />
       {error && <p className="form-error">{error}</p>}
@@ -266,6 +275,9 @@ function AddStalkerForm({ onClose }: { onClose: () => void }) {
       <h3 className="form-title">Add Stalker Portal</h3>
       <input className="form-input" placeholder="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} required />
       <input className="form-input" placeholder="Portal URL (http://...)" value={form.url} onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))} required />
+      {form.url.trim().toLowerCase().startsWith('http://') && (
+        <p className="form-http-warn">Your MAC address will be sent unencrypted over HTTP. Use HTTPS if your portal supports it.</p>
+      )}
       <input className="form-input" placeholder="MAC Address (00:1A:79:...)" value={form.mac} onChange={(e) => setForm((f) => ({ ...f, mac: e.target.value }))} required />
       {error && <p className="form-error">{error}</p>}
       <div className="form-actions">
@@ -424,6 +436,89 @@ function IntegrationsSettings() {
         {omdbTest === 'idle' && omdbKey && localStorage.getItem('omdb_api_key') === omdbKey.trim() && (
           <p className="integration-status ok">✓ OMDb active — used when TMDB key is absent.</p>
         )}
+      </div>
+    </div>
+  )
+}
+
+type UpdateState = 'idle' | 'checking' | 'up-to-date' | 'update-available' | 'error'
+
+function compareVersions(a: string, b: string): number {
+  const pa = a.split('.').map(Number)
+  const pb = b.split('.').map(Number)
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const diff = (pa[i] || 0) - (pb[i] || 0)
+    if (diff !== 0) return diff
+  }
+  return 0
+}
+
+function AboutSettings() {
+  const [version, setVersion] = useState<string | null>(null)
+  const [updateState, setUpdateState] = useState<UpdateState>('idle')
+  const [latestVersion, setLatestVersion] = useState<string | null>(null)
+  const currentPlatform = (() => { try { return platform() } catch { return 'windows' } })()
+
+  useEffect(() => {
+    getVersion().then(setVersion).catch(() => setVersion(null))
+  }, [])
+
+  const checkForUpdates = async () => {
+    if (!version || updateState === 'checking') return
+    setUpdateState('checking')
+    try {
+      const res = await fetch('https://api.github.com/repos/Goombsta/SingularityV2/releases/latest')
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json() as { tag_name: string }
+      const tag = data.tag_name.replace(/^v/, '')
+      setLatestVersion(tag)
+      setUpdateState(compareVersions(version, tag) < 0 ? 'update-available' : 'up-to-date')
+    } catch {
+      setUpdateState('error')
+    }
+  }
+
+  const downloadUrl = currentPlatform === 'android'
+    ? 'https://www.singularitytv.app/downloads/Singularitydeux.apk'
+    : 'https://www.singularitytv.app/downloads/Singularitydeux.Setup.exe'
+
+  return (
+    <div className="settings-section">
+      <div className="about-hero">
+        <div className="about-glow" />
+        <img src="/icon-foreground.png" alt="Singularity" className="about-icon" />
+        <div className="about-name-row">
+          <h2 className="about-name">Singularity</h2>
+          {version != null && <span className="about-version-badge">v{version}</span>}
+        </div>
+        <p className="about-tagline">IPTV &amp; VOD streaming for Android &amp; Windows</p>
+
+        <div className="about-update-area">
+          <button
+            className={`about-update-btn${updateState === 'checking' ? ' checking' : ''}`}
+            onClick={checkForUpdates}
+            disabled={updateState === 'checking' || !version}
+          >
+            {updateState === 'checking'
+              ? <><span className="about-spinner" />Checking…</>
+              : 'Check for Updates'}
+          </button>
+
+          {updateState === 'up-to-date' && (
+            <p className="about-status ok">✓ You're up to date</p>
+          )}
+          {updateState === 'error' && (
+            <p className="about-status fail">Could not reach update server</p>
+          )}
+          {updateState === 'update-available' && latestVersion && (
+            <div className="about-update-available">
+              <p className="about-status update">v{latestVersion} is available</p>
+              <a href={downloadUrl} target="_blank" rel="noreferrer" className="about-download-btn">
+                Download Update
+              </a>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
