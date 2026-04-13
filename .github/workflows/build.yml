@@ -166,6 +166,69 @@ jobs:
           ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
           NDK_HOME: ${{ env.NDK_HOME }}
 
+      - name: Copy Kotlin plugin files into generated Android project
+        run: |
+          DEST="src-tauri/gen/android/app/src/main/java/com/singularity/app"
+          cp src-tauri/android-plugin/MpvPlugin.kt "$DEST/"
+          cp src-tauri/android-plugin/UpdaterPlugin.kt "$DEST/"
+          cp src-tauri/android-plugin/CredentialPlugin.kt "$DEST/" 2>/dev/null || true
+          echo "Plugin files copied:"
+          ls -la "$DEST/"
+
+      - name: Register plugins in MainActivity
+        run: |
+          MAINACTIVITY="src-tauri/gen/android/app/src/main/java/com/singularity/app/MainActivity.kt"
+          # Replace the default empty onCreate with plugin registrations
+          cat > "$MAINACTIVITY" << 'EOF'
+          package com.singularity.app
+
+          import android.os.Bundle
+          import androidx.activity.enableEdgeToEdge
+
+          class MainActivity : TauriActivity() {
+            override fun onCreate(savedInstanceState: Bundle?) {
+              enableEdgeToEdge()
+              this.registerPlugin(MpvPlugin::class.java)
+              this.registerPlugin(UpdaterPlugin::class.java)
+              super.onCreate(savedInstanceState)
+            }
+          }
+          EOF
+          echo "MainActivity updated"
+
+      - name: Patch Gradle — add JitPack repository and MPV dependency
+        run: |
+          ROOT_GRADLE="src-tauri/gen/android/build.gradle.kts"
+          APP_GRADLE="src-tauri/gen/android/app/build.gradle.kts"
+
+          # Add JitPack to allprojects repositories in root build.gradle.kts
+          sed -i '/allprojects \{/{
+            :loop
+            N
+            /repositories \{/{
+              :inner
+              N
+              /mavenCentral()/{
+                s/mavenCentral()/mavenCentral()\n        maven { url = uri("https:\/\/jitpack.io") }/
+                b done
+              }
+              b inner
+            }
+            b loop
+            :done
+          }' "$ROOT_GRADLE"
+
+          # Add NDK abiFilters to defaultConfig in app/build.gradle.kts
+          sed -i '/versionName = tauriProperties/a\        ndk {\n            abiFilters += listOf("arm64-v8a", "x86_64")\n        }' "$APP_GRADLE"
+
+          # Add MPV dependency to dependencies block in app/build.gradle.kts
+          sed -i '/implementation("androidx.webkit/a\    implementation("is.xyz.mpv:mpv-android:0.38.0")' "$APP_GRADLE"
+
+          echo "--- Root build.gradle.kts ---"
+          cat "$ROOT_GRADLE"
+          echo "--- App build.gradle.kts ---"
+          cat "$APP_GRADLE"
+
       - name: Patch AndroidManifest — enable cleartext HTTP
         run: |
           MANIFEST="src-tauri/gen/android/app/src/main/AndroidManifest.xml"
@@ -179,6 +242,9 @@ jobs:
           # Confirm the attribute is present (insert if missing entirely)
           grep -q 'usesCleartextTraffic="true"' "$MANIFEST" || \
             sed -i 's/android:theme="@style\/Theme.singularity"/android:theme="@style\/Theme.singularity"\n        android:usesCleartextTraffic="true"/' "$MANIFEST"
+          # Add REQUEST_INSTALL_PACKAGES permission (needed for in-app APK updater)
+          grep -q 'REQUEST_INSTALL_PACKAGES' "$MANIFEST" || \
+            sed -i 's|<uses-permission android:name="android.permission.INTERNET" />|<uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />|' "$MANIFEST"
           echo "--- Manifest after patch ---"
           cat "$MANIFEST"
 

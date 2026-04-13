@@ -46,6 +46,14 @@ function getPlatform(): string {
   return _platformCache
 }
 function isWindowsPlatform(): boolean { return getPlatform() === 'windows' }
+function isAndroidPlatform(): boolean { return getPlatform() === 'android' }
+
+// Route MPV commands to the Kotlin MpvPlugin on Android, Rust on Windows.
+// Command names and argument shapes are identical on both platforms.
+function mpvCmd<T = void>(cmd: string, args: Record<string, unknown> = {}): Promise<T> {
+  if (isAndroidPlatform()) return invoke<T>(`plugin:mpv|${cmd}`, args)
+  return invoke<T>(cmd, args)
+}
 
 export default function PlayerScreen() {
   const location = useLocation()
@@ -186,8 +194,9 @@ export default function PlayerScreen() {
 
     async function start() {
       const win = isWindowsPlatform()
+      const android = isAndroidPlatform()
 
-      if (!win) {
+      if (!win && !android) {
         if (!cancelled) setPlayerMode('html5')
         return
       }
@@ -196,10 +205,10 @@ export default function PlayerScreen() {
       const h = window.innerHeight
 
       try {
-        await invoke('mpv_create', { playerId, x: 0, y: 0, width: w, height: h, live: state?.live !== false })
+        await mpvCmd('mpv_create', { playerId, x: 0, y: 0, width: w, height: h, live: state?.live !== false })
 
         if (cancelled) {
-          invoke('mpv_destroy', { playerId }).catch(() => {})
+          mpvCmd('mpv_destroy', { playerId }).catch(() => {})
           return
         }
 
@@ -207,7 +216,7 @@ export default function PlayerScreen() {
         setVideoReady(false)
         setPlayerMode('mpv')
 
-        await invoke('mpv_load_url', { playerId, url: state!.url })
+        await mpvCmd('mpv_load_url', { playerId, url: state!.url })
         setPaused(false)
         setStreamError(false)
         tracksLoadedRef.current = false
@@ -221,7 +230,7 @@ export default function PlayerScreen() {
         let idleCount = 0
         pollRef.current = setInterval(async () => {
           try {
-            const props = await invoke<{ duration: number; position: number; paused: boolean; volume: number; idle: boolean }>(
+            const props = await mpvCmd<{ duration: number; position: number; paused: boolean; volume: number; idle: boolean }>(
               'player_get_properties', { playerId }
             )
             pollCount++
@@ -253,7 +262,7 @@ export default function PlayerScreen() {
           if (tracksLoadedRef.current) return
           tracksLoadedRef.current = true
           try {
-            const tracks = await invoke<TrackInfo[]>('mpv_get_tracks', { playerId })
+            const tracks = await mpvCmd<TrackInfo[]>('mpv_get_tracks', { playerId })
             setSubtitleTracks(tracks.filter((t) => t.track_type === 'sub'))
             const audio = tracks.filter((t) => t.track_type === 'audio')
             setAudioTracks(audio)
@@ -295,7 +304,7 @@ export default function PlayerScreen() {
   useEffect(() => {
     if (playerMode !== 'mpv') return
     const onResize = () => {
-      invoke('mpv_resize', {
+      mpvCmd('mpv_resize', {
         playerId: playerIdRef.current, x: 0, y: 0,
         width: window.innerWidth, height: window.innerHeight,
       }).catch(() => {})
@@ -496,10 +505,10 @@ export default function PlayerScreen() {
   const togglePlay = () => {
     if (playerMode === 'mpv') {
       if (paused) {
-        invoke('mpv_resume', { playerId: playerIdRef.current }).catch(() => {})
+        mpvCmd('mpv_resume', { playerId: playerIdRef.current }).catch(() => {})
         setPaused(false)
       } else {
-        invoke('mpv_pause', { playerId: playerIdRef.current }).catch(() => {})
+        mpvCmd('mpv_pause', { playerId: playerIdRef.current }).catch(() => {})
         setPaused(true)
       }
     } else {
@@ -515,7 +524,7 @@ export default function PlayerScreen() {
     const next = Math.max(0, Math.min(duration || Infinity, position + secs))
     setPosition(next)
     if (playerMode === 'mpv') {
-      invoke('mpv_seek', { playerId: playerIdRef.current, position: next }).catch(() => {})
+      mpvCmd('mpv_seek', { playerId: playerIdRef.current, position: next }).catch(() => {})
     } else if (videoRef.current) {
       videoRef.current.currentTime = next
     }
@@ -526,7 +535,7 @@ export default function PlayerScreen() {
     const pos = Number(e.target.value)
     setPosition(pos)
     if (playerMode === 'mpv') {
-      invoke('mpv_seek', { playerId: playerIdRef.current, position: pos }).catch(() => {})
+      mpvCmd('mpv_seek', { playerId: playerIdRef.current, position: pos }).catch(() => {})
     } else if (videoRef.current) {
       videoRef.current.currentTime = pos
     }
@@ -537,7 +546,7 @@ export default function PlayerScreen() {
     const vol = Number(e.target.value)
     setVolume(vol)
     if (playerMode === 'mpv') {
-      invoke('mpv_set_volume', { playerId: playerIdRef.current, volume: muted ? 0 : vol }).catch(() => {})
+      mpvCmd('mpv_set_volume', { playerId: playerIdRef.current, volume: muted ? 0 : vol }).catch(() => {})
     } else if (videoRef.current) {
       videoRef.current.volume = vol / 100
     }
@@ -548,7 +557,7 @@ export default function PlayerScreen() {
     const next = !muted
     setMuted(next)
     if (playerMode === 'mpv') {
-      invoke('mpv_set_volume', { playerId: playerIdRef.current, volume: next ? 0 : volume }).catch(() => {})
+      mpvCmd('mpv_set_volume', { playerId: playerIdRef.current, volume: next ? 0 : volume }).catch(() => {})
     } else if (videoRef.current) {
       videoRef.current.muted = next
     }
@@ -568,20 +577,20 @@ export default function PlayerScreen() {
 
   const selectSubTrack = (id: number) => {
     setSelectedSubId(id)
-    invoke('mpv_set_sub_track', { playerId: playerIdRef.current, trackId: id }).catch(() => {})
+    mpvCmd('mpv_set_sub_track', { playerId: playerIdRef.current, trackId: id }).catch(() => {})
     resetControlsTimer()
   }
 
   const selectAudioTrack = (id: number) => {
     setSelectedAudioId(id)
-    invoke('mpv_set_audio_track', { playerId: playerIdRef.current, trackId: id }).catch(() => {})
+    mpvCmd('mpv_set_audio_track', { playerId: playerIdRef.current, trackId: id }).catch(() => {})
     resetControlsTimer()
   }
 
   const SUB_SCALES = [0.7, 1.0, 1.5, 2.0]
   const handleSubtitleSize = (v: number) => {
     setSubtitleSize(v)
-    invoke('mpv_set_sub_scale', { playerId: playerIdRef.current, scale: SUB_SCALES[v] }).catch(() => {})
+    mpvCmd('mpv_set_sub_scale', { playerId: playerIdRef.current, scale: SUB_SCALES[v] }).catch(() => {})
   }
 
   const formatTime = (s: number) => {
@@ -661,7 +670,7 @@ export default function PlayerScreen() {
             onClick={(e) => {
               e.stopPropagation()
               setStreamError(false)
-              invoke('mpv_load_url', { playerId: playerIdRef.current, url: state!.url }).catch(() => {})
+              mpvCmd('mpv_load_url', { playerId: playerIdRef.current, url: state!.url }).catch(() => {})
             }}
           >
             Retry
