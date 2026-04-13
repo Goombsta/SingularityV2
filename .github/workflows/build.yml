@@ -198,36 +198,48 @@ jobs:
 
       - name: Patch Gradle — add JitPack repository and MPV dependency
         run: |
-          ROOT_GRADLE="src-tauri/gen/android/build.gradle.kts"
-          APP_GRADLE="src-tauri/gen/android/app/build.gradle.kts"
+          python3 - <<'PYEOF'
+          import sys
 
-          # Add JitPack to allprojects repositories in root build.gradle.kts
-          sed -i '/allprojects \{/{
-            :loop
-            N
-            /repositories \{/{
-              :inner
-              N
-              /mavenCentral()/{
-                s/mavenCentral()/mavenCentral()\n        maven { url = uri("https:\/\/jitpack.io") }/
-                b done
-              }
-              b inner
-            }
-            b loop
-            :done
-          }' "$ROOT_GRADLE"
+          ROOT = "src-tauri/gen/android/build.gradle.kts"
+          APP  = "src-tauri/gen/android/app/build.gradle.kts"
 
-          # Add NDK abiFilters to defaultConfig in app/build.gradle.kts
-          sed -i '/versionName = tauriProperties/a\        ndk {\n            abiFilters += listOf("arm64-v8a", "x86_64")\n        }' "$APP_GRADLE"
+          # ── Root: add JitPack after the LAST mavenCentral() (allprojects block) ──
+          root = open(ROOT).read()
+          jitpack = '\n        maven { url = uri("https://jitpack.io") }'
+          idx = root.rfind("mavenCentral()")
+          if idx == -1:
+              print("ERROR: mavenCentral() not found in root build.gradle.kts", file=sys.stderr)
+              sys.exit(1)
+          end = idx + len("mavenCentral()")
+          root = root[:end] + jitpack + root[end:]
+          open(ROOT, "w").write(root)
+          print("Root Gradle patched — JitPack added")
 
-          # Add MPV dependency to dependencies block in app/build.gradle.kts
-          sed -i '/implementation("androidx.webkit/a\    implementation("is.xyz.mpv:mpv-android:0.38.0")' "$APP_GRADLE"
+          # ── App: add NDK abiFilters after versionName line ──
+          app = open(APP).read()
+          ndk_block = '\n        ndk {\n            abiFilters += listOf("arm64-v8a", "x86_64")\n        }'
+          marker = 'versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")'
+          if marker in app and 'abiFilters' not in app:
+              app = app.replace(marker, marker + ndk_block)
+              print("App Gradle patched — NDK abiFilters added")
 
-          echo "--- Root build.gradle.kts ---"
-          cat "$ROOT_GRADLE"
-          echo "--- App build.gradle.kts ---"
-          cat "$APP_GRADLE"
+          # ── App: add MPV dependency after first androidx.webkit line ──
+          mpv_dep = '\n    implementation("is.xyz.mpv:mpv-android:0.38.0")'
+          webkit_marker = 'implementation("androidx.webkit:'
+          if webkit_marker in app and 'mpv-android' not in app:
+              idx = app.index(webkit_marker)
+              end = app.index('\n', idx)
+              app = app[:end] + mpv_dep + app[end:]
+              print("App Gradle patched — MPV dependency added")
+
+          open(APP, "w").write(app)
+
+          print("\n--- Root build.gradle.kts ---")
+          print(open(ROOT).read())
+          print("--- App build.gradle.kts ---")
+          print(open(APP).read())
+          PYEOF
 
       - name: Patch AndroidManifest — enable cleartext HTTP
         run: |
