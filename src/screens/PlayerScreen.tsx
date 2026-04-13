@@ -81,6 +81,7 @@ export default function PlayerScreen() {
   const [streamError, setStreamError] = useState(false)
   const [reconnecting, setReconnecting] = useState(false)
   const [reconnectKey, setReconnectKey] = useState(0)
+  const [unsupportedAudioCodec, setUnsupportedAudioCodec] = useState<string | null>(null)
 
   // Tracks
   const [subtitleTracks, setSubtitleTracks] = useState<TrackInfo[]>([])
@@ -335,13 +336,20 @@ export default function PlayerScreen() {
     video.src = ''
 
     const isLive = state.live !== false
+    const isAndroid = getPlatform() === 'android'
     const urlPath = url.split('?')[0].toLowerCase()
     const isHls = /\.m3u8$/.test(urlPath)
-    const isNativeFormat = /\.(mp4|mkv|avi|webm|mov|m4v|flv|wmv)$/.test(urlPath)
+    // Android WebView reliably supports only MP4/WebM/MOV/M4V natively.
+    // MKV, AVI, FLV, WMV → route to mpegts.js (many Xtream servers transcode to MPEG-TS
+    // regardless of the URL extension hint, so mpegts.js succeeds even for .mkv URLs).
+    const isNativeFormat = isAndroid
+      ? /\.(mp4|webm|m4v|mov)$/.test(urlPath)
+      : /\.(mp4|mkv|avi|webm|mov|m4v|flv|wmv)$/.test(urlPath)
+    const isAndroidFallbackContainer = isAndroid && /\.(mkv|avi|flv|wmv)$/.test(urlPath)
     const isMpegTs = /\.ts$/.test(urlPath)
-    // Extensionless live URLs (Xtream Codes format: /live/user/pass/id) serve HLS.
+    // Extensionless live or VOD/series URLs (Xtream Codes: /live/.../id or /series/.../id).
     // Always try HLS.js first for these — Android WebView cannot play raw MPEG-TS natively.
-    const isExtensionlessLive = isLive && !isHls && !isNativeFormat && !isMpegTs
+    const isExtensionless = !isHls && !isNativeFormat && !isMpegTs && !isAndroidFallbackContainer
 
     function startNative() {
       // Direct assignment — works for MP4, MKV, and sometimes raw MPEG-TS on Android WebView
@@ -366,6 +374,16 @@ export default function PlayerScreen() {
       )
       mpegtsRef.current = player
       player.attachMediaElement(video)
+      // Detect audio codecs unsupported by Android WebView (TrueHD, DTS).
+      // Mute immediately and surface a warning — video will still play.
+      player.on(mpegts.Events.MEDIA_INFO, (mediaInfo: unknown) => {
+        const info = mediaInfo as { audioCodec?: string }
+        const codec = (info.audioCodec ?? '').toLowerCase()
+        if (['truehd', 'dts', 'mlp'].some(c => codec.includes(c))) {
+          video.muted = true
+          setUnsupportedAudioCodec(info.audioCodec ?? 'unknown')
+        }
+      })
       player.load()
       video.muted = true
       player.play()
@@ -413,8 +431,14 @@ export default function PlayerScreen() {
       video.play().catch(() => {})
     } else if (isNativeFormat) {
       startNative()
-    } else if (isExtensionlessLive) {
-      // Xtream-style extensionless URL — try HLS first, fall back to MPEG-TS, then native
+    } else if (isAndroidFallbackContainer) {
+      // MKV/AVI/FLV/WMV on Android — WebView can't demux these natively.
+      // Try mpegts.js first (many Xtream servers send MPEG-TS regardless of extension).
+      // mpegts.js error handler already falls back to startNative() on failure.
+      startMpegTs()
+    } else if (isExtensionless) {
+      // Xtream-style extensionless URL (live /live/.../id or VOD/series /series/.../id).
+      // Try HLS first, fall back to MPEG-TS, then native.
       if (Hls.isSupported()) {
         startHls(() => startMpegTs())
       } else {
@@ -431,6 +455,7 @@ export default function PlayerScreen() {
       }
     }
 
+    setUnsupportedAudioCodec(null)
     return () => {
       hlsRef.current?.destroy(); hlsRef.current = null
       if (mpegtsRef.current) {
@@ -454,6 +479,13 @@ export default function PlayerScreen() {
     resetControlsTimer()
     return () => { if (controlsTimer.current) clearTimeout(controlsTimer.current) }
   }, [resetControlsTimer])
+
+  // Auto-dismiss the unsupported audio codec warning after 6 s
+  useEffect(() => {
+    if (!unsupportedAudioCodec) return
+    const t = setTimeout(() => setUnsupportedAudioCodec(null), 6000)
+    return () => clearTimeout(t)
+  }, [unsupportedAudioCodec])
 
   useEffect(() => () => {
     if (stallTimerRef.current) clearTimeout(stallTimerRef.current)
@@ -610,6 +642,12 @@ export default function PlayerScreen() {
         <div className="player-reconnect-badge">
           <span className="player-reconnect-spinner" />
           Reconnecting…
+        </div>
+      )}
+
+      {unsupportedAudioCodec && (
+        <div className="audio-codec-warning">
+          Audio codec ({unsupportedAudioCodec}) unsupported — video only
         </div>
       )}
 

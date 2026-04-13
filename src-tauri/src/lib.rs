@@ -118,8 +118,7 @@ pub fn run() {
             commands::player::mpv_set_sub_track,
             #[cfg(not(target_os = "android"))]
             commands::player::mpv_set_sub_scale,
-            // Updater — desktop only
-            #[cfg(not(target_os = "android"))]
+            // Updater — download works on all platforms; install is desktop-only
             commands::updater::download_update,
             #[cfg(not(target_os = "android"))]
             commands::updater::install_update,

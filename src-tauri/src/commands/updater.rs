@@ -2,8 +2,8 @@ use std::env::temp_dir;
 
 /// Download an installer from `url` into the OS temp directory as `filename`.
 /// Returns the absolute path of the saved file on success.
-/// Desktop-only — Android sideloading requires the browser flow.
-#[cfg(not(target_os = "android"))]
+/// On Android, temp_dir() resolves to the app's private cache dir which is
+/// accessible via the FileProvider already configured in AndroidManifest.xml.
 #[tauri::command]
 pub async fn download_update(url: String, filename: String) -> Result<String, String> {
     let client = reqwest::Client::builder()

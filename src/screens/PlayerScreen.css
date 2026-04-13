@@ -84,6 +84,19 @@
   border-radius: 4px;
 }
 
+.audio-codec-warning {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  background: rgba(0, 0, 0, 0.75);
+  color: rgba(255, 200, 60, 0.95);
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  z-index: 10;
+  pointer-events: none;
+}
+
 .player-stream-error {
   position: absolute;
   inset: 0;

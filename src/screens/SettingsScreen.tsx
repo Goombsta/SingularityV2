@@ -517,7 +517,11 @@ function AboutSettings() {
   const installUpdate = async () => {
     if (!downloadedPath) return
     try {
-      await invoke('install_update', { path: downloadedPath })
+      if (isAndroid) {
+        await invoke('plugin:updater|install_apk', { path: downloadedPath })
+      } else {
+        await invoke('install_update', { path: downloadedPath })
+      }
     } catch {
       setUpdateState('download-error')
     }
@@ -554,11 +558,7 @@ function AboutSettings() {
           {(updateState === 'update-available' || updateState === 'downloading' || updateState === 'downloaded' || updateState === 'download-error') && latestVersion && (
             <div className="about-update-available">
               <p className="about-status update">v{latestVersion} is available</p>
-              {isAndroid ? (
-                <a href={downloadUrl} target="_blank" rel="noreferrer" className="about-download-btn">
-                  Download Update
-                </a>
-              ) : updateState === 'downloading' ? (
+              {updateState === 'downloading' ? (
                 <button className="about-download-btn checking" disabled>
                   <span className="about-spinner" />Downloading…
                 </button>
