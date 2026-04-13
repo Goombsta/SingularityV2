@@ -174,10 +174,9 @@ jobs:
           echo "Plugin files copied:"
           ls -la "$DEST/"
 
-      - name: Register plugins in MainActivity
+      - name: Write MainActivity (edge-to-edge only; plugins registered from Rust)
         run: |
           MAINACTIVITY="src-tauri/gen/android/app/src/main/java/com/singularity/app/MainActivity.kt"
-          # Replace the default empty onCreate with plugin registrations
           cat > "$MAINACTIVITY" << 'EOF'
           package com.singularity.app
 
@@ -187,8 +186,6 @@ jobs:
           class MainActivity : TauriActivity() {
             override fun onCreate(savedInstanceState: Bundle?) {
               enableEdgeToEdge()
-              this.registerPlugin(VlcPlugin::class.java)
-              this.registerPlugin(UpdaterPlugin::class.java)
               super.onCreate(savedInstanceState)
             }
           }

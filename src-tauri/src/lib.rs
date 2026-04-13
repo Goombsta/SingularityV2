@@ -1,3 +1,4 @@
+mod android_plugins;
 mod commands;
 mod epg;
 mod persist;
@@ -22,6 +23,8 @@ pub fn run() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_os::init())
+        .plugin(android_plugins::init_vlc())
+        .plugin(android_plugins::init_updater())
         .manage(PlaylistStore::new())
         .manage(EpgCache::new())
         .manage(FavoritesStore::new());
