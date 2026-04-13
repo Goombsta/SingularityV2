@@ -62,11 +62,11 @@ rust {
 
 dependencies {
     implementation("androidx.webkit:webkit:1.14.0")
+    // libVLC — full codec support (TrueHD, DTS, H.265, MKV, etc.) on Maven Central
+    implementation("org.videolan.android:libvlc-all:3.6.0")
     implementation("androidx.appcompat:appcompat:1.7.1")
     implementation("androidx.activity:activity-ktx:1.10.1")
     implementation("com.google.android.material:material:1.12.0")
-    // MPV Android — bundles prebuilt libmpv.so for arm64-v8a and x86_64
-    implementation("is.xyz.mpv:mpv-android:0.38.0")
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.4")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.0")

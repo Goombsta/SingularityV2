@@ -169,7 +169,7 @@ jobs:
       - name: Copy Kotlin plugin files into generated Android project
         run: |
           DEST="src-tauri/gen/android/app/src/main/java/com/singularity/app"
-          cp src-tauri/android-plugin/MpvPlugin.kt "$DEST/"
+          cp src-tauri/android-plugin/VlcPlugin.kt "$DEST/"
           cp src-tauri/android-plugin/UpdaterPlugin.kt "$DEST/"
           cp src-tauri/android-plugin/CredentialPlugin.kt "$DEST/" 2>/dev/null || true
           echo "Plugin files copied:"
@@ -188,7 +188,7 @@ jobs:
           class MainActivity : TauriActivity() {
             override fun onCreate(savedInstanceState: Bundle?) {
               enableEdgeToEdge()
-              this.registerPlugin(MpvPlugin::class.java)
+              this.registerPlugin(VlcPlugin::class.java)
               this.registerPlugin(UpdaterPlugin::class.java)
               super.onCreate(savedInstanceState)
             }
@@ -196,7 +196,7 @@ jobs:
           EOF
           echo "MainActivity updated"
 
-      - name: Patch Gradle — add JitPack repository and MPV dependency
+      - name: Patch Gradle — add JitPack repository and NDK abiFilters
         run: |
           python3 - <<'PYEOF'
           import sys
@@ -224,14 +224,14 @@ jobs:
               app = app.replace(marker, marker + ndk_block)
               print("App Gradle patched — NDK abiFilters added")
 
-          # ── App: add MPV dependency after first androidx.webkit line ──
-          mpv_dep = '\n    implementation("is.xyz.mpv:mpv-android:0.38.0")'
+          # ── App: add libVLC dependency after first androidx.webkit line ──
+          vlc_dep = '\n    implementation("org.videolan.android:libvlc-all:3.6.0")'
           webkit_marker = 'implementation("androidx.webkit:'
-          if webkit_marker in app and 'mpv-android' not in app:
+          if webkit_marker in app and 'libvlc-all' not in app:
               idx = app.index(webkit_marker)
               end = app.index('\n', idx)
-              app = app[:end] + mpv_dep + app[end:]
-              print("App Gradle patched — MPV dependency added")
+              app = app[:end] + vlc_dep + app[end:]
+              print("App Gradle patched — libVLC dependency added")
 
           open(APP, "w").write(app)
 
