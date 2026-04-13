@@ -6,7 +6,7 @@ import PlaylistPicker from '../components/common/PlaylistPicker'
 import HorizontalRow from '../components/common/HorizontalRow'
 import { usePlaylistStore } from '../store/slices/playlistSlice'
 import { useUiStore } from '../store/slices/uiSlice'
-import { groupByExcelCategories, deduplicateItems, extractBaseTitle } from '../utils/genreMap'
+import { groupByExcelCategories, deduplicateItems, extractBaseTitle, matchesTrendingTitle } from '../utils/genreMap'
 import { MOVIE_CATEGORY_ORDER, MOVIE_TITLE_MAP } from '../data/movieCategories'
 import type { VersionedItem } from '../utils/genreMap'
 import type { FavoriteItem, VodItem } from '../types'
@@ -16,6 +16,12 @@ interface OmdbMeta {
   title: string; year: string; rated: string; runtime: string
   genre: string; director: string; actors: string; plot: string
   poster: string; imdbRating: string; awards: string; boxOffice: string
+}
+
+interface TmdbTrendingItem {
+  tmdbId: number; title: string; overview: string
+  posterUrl?: string; backdropUrl?: string
+  voteAverage: number; releaseDate?: string; mediaType: string
 }
 
 interface TmdbCastMember { name: string; character: string; profileUrl?: string }
@@ -33,7 +39,7 @@ export default function VodScreen() {
   const { addFavorite, removeFavorite, isFavorite } = useUiStore()
   const navigate = useNavigate()
   const location = useLocation()
-  const routeState = location.state as { preSelectedId?: string; category?: string } | null
+  const routeState = location.state as { preSelectedId?: string; preSelectedItem?: VodItem; category?: string } | null
   const scrollRef = useRef<HTMLDivElement>(null)
   const savedScroll = useRef(0)
   const [search, setSearch] = useState('')
@@ -42,7 +48,7 @@ export default function VodScreen() {
   const [tmdb, setTmdb] = useState<TmdbMeta | null>(null)
   const [omdb, setOmdb] = useState<OmdbMeta | null>(null)
   const [imdbMovies, setImdbMovies] = useState<string[]>([])
-  const [tmdbTrendingMovies, setTmdbTrendingMovies] = useState<{ title: string }[]>([])
+  const [tmdbTrendingMovies, setTmdbTrendingMovies] = useState<TmdbTrendingItem[]>([])
 
   useEffect(() => {
     if (activePlaylistId) fetchVod(activePlaylistId)
@@ -52,7 +58,7 @@ export default function VodScreen() {
     ;(async () => {
       const tmdbKey = await invoke<string | null>('get_credential', { key: 'tmdb_api_key' }).catch(() => null) || localStorage.getItem('tmdb_api_key') || ''
       if (tmdbKey) {
-        invoke<{ title: string }[]>('fetch_tmdb_trending', { mediaType: 'movie', apiKey: tmdbKey })
+        invoke<TmdbTrendingItem[]>('fetch_tmdb_trending', { mediaType: 'movie', apiKey: tmdbKey })
           .then(setTmdbTrendingMovies).catch(() => {})
       } else {
         invoke<string[]>('fetch_imdb_trending', { mediaType: 'movie' })
@@ -61,7 +67,15 @@ export default function VodScreen() {
     })()
   }, [])
 
+  // Direct item passed via navigation state (TMDB-only or catalog item) — no catalog lookup needed
   useEffect(() => {
+    if (routeState?.preSelectedItem) selectVod(routeState.preSelectedItem)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeState])
+
+  // Catalog id passed via navigation (e.g. favorites) — wait for vods to load
+  useEffect(() => {
+    if (routeState?.preSelectedItem) return // handled above
     if (routeState?.preSelectedId && vods.length > 0) {
       const found = vods.find((v) => v.id === routeState.preSelectedId)
       if (found) selectVod(found)
@@ -115,33 +129,69 @@ export default function VodScreen() {
     return groupByExcelCategories(deduped, MOVIE_CATEGORY_ORDER, MOVIE_TITLE_MAP, ['Trending Now', trending])
   }, [deduped])
 
+  const byGenreWithTrending = useMemo(() => {
+    if (tmdbTrendingMovies.length > 0) {
+      const used = new Set<string>()
+      const trending: VodItem[] = []
+      for (const tmdb of tmdbTrendingMovies) {
+        const t = (extractBaseTitle(tmdb.title) || tmdb.title).toLowerCase()
+        const match = vods.find((v) => {
+          if (used.has(v.id)) return false
+          const n = (extractBaseTitle(v.name) || v.name).toLowerCase()
+          return matchesTrendingTitle(n, t)
+        })
+        if (match) {
+          used.add(match.id)
+          trending.push({
+            ...match,
+            poster: tmdb.posterUrl || match.poster,
+            backdrop: tmdb.backdropUrl || match.backdrop,
+            rating: tmdb.voteAverage ? String(tmdb.voteAverage) : match.rating,
+          })
+        } else {
+          trending.push({
+            id: `tmdb-movie-${tmdb.tmdbId}`,
+            name: tmdb.title,
+            stream_url: '',
+            poster: tmdb.posterUrl,
+            backdrop: tmdb.backdropUrl,
+            plot: tmdb.overview,
+            rating: tmdb.voteAverage ? String(tmdb.voteAverage) : undefined,
+            year: tmdb.releaseDate?.slice(0, 4),
+            playlist_id: '',
+            stream_id: undefined,
+          } as VodItem)
+        }
+      }
+      return byGenre.map(([cat, items]) =>
+        cat === 'Trending Now' ? [cat, trending] as [typeof cat, typeof items] : [cat, items] as [typeof cat, typeof items]
+      )
+    }
+    if (imdbMovies.length > 0) {
+      const used = new Set<string>()
+      const trending: typeof vods = []
+      for (const trendTitle of imdbMovies) {
+        const t = (extractBaseTitle(trendTitle) || trendTitle).toLowerCase()
+        const match = vods.find((v) => {
+          if (used.has(v.id)) return false
+          const n = (extractBaseTitle(v.name) || v.name).toLowerCase()
+          return matchesTrendingTitle(n, t)
+        })
+        if (match) { used.add(match.id); trending.push(match) }
+      }
+      return byGenre.map(([cat, items]) =>
+        cat === 'Trending Now' ? [cat, trending] as [typeof cat, typeof items] : [cat, items] as [typeof cat, typeof items]
+      )
+    }
+    return byGenre
+  }, [byGenre, vods, tmdbTrendingMovies, imdbMovies])
+
   // ── Category grid (See All) — must be before any early return ─────────────
   const categoryItems = useMemo(() => {
     if (!categoryFilter) return []
-    const row = byGenre.find(([cat]) => cat === categoryFilter)
+    const row = byGenreWithTrending.find(([cat]) => cat === categoryFilter)
     return row ? row[1] : []
-  }, [categoryFilter, byGenre])
-
-  const byGenreWithTrending = useMemo(() => {
-    const titleList = tmdbTrendingMovies.length > 0
-      ? tmdbTrendingMovies.map((t) => t.title)
-      : imdbMovies
-    if (titleList.length === 0) return byGenre
-    const used = new Set<string>()
-    const trending: typeof vods = []
-    for (const trendTitle of titleList) {
-      const t = (extractBaseTitle(trendTitle) || trendTitle).toLowerCase()
-      const match = vods.find((v) => {
-        if (used.has(v.id)) return false
-        const n = (extractBaseTitle(v.name) || v.name).toLowerCase()
-        return n === t || n.includes(t) || t.includes(n)
-      })
-      if (match) { used.add(match.id); trending.push(match) }
-    }
-    return byGenre.map(([cat, items]) =>
-      cat === 'Trending Now' ? [cat, trending] as [typeof cat, typeof items] : [cat, items] as [typeof cat, typeof items]
-    )
-  }, [byGenre, vods, tmdbTrendingMovies, imdbMovies])
+  }, [categoryFilter, byGenreWithTrending])
 
   const similar = useMemo(() => {
     if (!selected || !selected.genre) return []

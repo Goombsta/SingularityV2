@@ -24,7 +24,7 @@ export default function SeriesScreen() {
   const [loadingInfo, setLoadingInfo] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
-  const routeState = location.state as { preSelectedId?: string } | null
+  const routeState = location.state as { preSelectedId?: string; preSelectedItem?: Series } | null
 
   useEffect(() => {
     if (activePlaylistId) fetchSeries(activePlaylistId)
@@ -43,7 +43,15 @@ export default function SeriesScreen() {
     })()
   }, [])
 
+  // Direct item passed via navigation state — no catalog lookup needed
   useEffect(() => {
+    if (routeState?.preSelectedItem) handleSelectSeries(routeState.preSelectedItem)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeState])
+
+  // Catalog id passed via navigation (e.g. favorites) — wait for series to load
+  useEffect(() => {
+    if (routeState?.preSelectedItem) return // handled above
     if (routeState?.preSelectedId && series.length > 0) {
       const found = series.find((s) => s.id === routeState.preSelectedId)
       if (found) handleSelectSeries(found)

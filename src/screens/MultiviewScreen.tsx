@@ -80,21 +80,53 @@ export default function MultiviewScreen() {
   const [showUrlInput, setShowUrlInput] = useState(false)
   const [urlInput, setUrlInput] = useState('')
 
+  // Sidebar collapse / hover-overlay — mirrors LiveTvScreen pattern
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [sidebarOverlay, setSidebarOverlay] = useState(false)
+  const overlayHideRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const inactivityRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   const videoRefs = useRef<(HTMLVideoElement | null)[]>([null, null, null, null])
   const hlsInstances = useRef<(Hls | null)[]>([null, null, null, null])
   const mpegtsInstances = useRef<(any | null)[]>([null, null, null, null])
   const reconnectTimers = useRef<(ReturnType<typeof setTimeout> | null)[]>([null, null, null, null])
   const stallTimers = useRef<(ReturnType<typeof setTimeout> | null)[]>([null, null, null, null])
-  // Track which URL is currently loaded in each cell to detect changes
   const loadedUrls = useRef<string[]>(['', '', '', ''])
+
+  // Progress watchdog: if a playing cell makes no timeupdate progress for 20s, reconnect.
+  // This catches HLS.js streams that freeze without surfacing HTML5 video events.
+  const cellsRef = useRef(cells)
+  const lastProgressTime = useRef<number[]>([Date.now(), Date.now(), Date.now(), Date.now()])
+  const watchdogRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  useEffect(() => { cellsRef.current = cells }, [cells])
 
   useEffect(() => {
     if (activePlaylistId) fetchChannels(activePlaylistId)
   }, [activePlaylistId])
 
+  // Stable watchdog interval — uses refs so closure staleness is not an issue
+  useEffect(() => {
+    watchdogRef.current = setInterval(() => {
+      cellsRef.current.forEach((cell) => {
+        if (!cell.url || cell.reconnecting) return
+        const video = videoRefs.current[cell.id]
+        if (!video || video.paused || video.ended) return
+        if (Date.now() - lastProgressTime.current[cell.id] > 20000) {
+          lastProgressTime.current[cell.id] = Date.now() // prevent repeated triggers
+          triggerReconnect(cell.id)
+        }
+      })
+    }, 10000)
+    return () => { if (watchdogRef.current) clearInterval(watchdogRef.current) }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── loadStream: imperatively loads a stream into a video element ──────────
   function loadStream(cellId: number, url: string, video: HTMLVideoElement | null) {
     if (!video || !url) return
+
+    // Reset progress timer so the watchdog doesn't fire immediately on a fresh load
+    lastProgressTime.current[cellId] = Date.now()
 
     // Destroy previous instances
     hlsInstances.current[cellId]?.destroy()
@@ -111,14 +143,19 @@ export default function MultiviewScreen() {
       hls.loadSource(url)
       hls.attachMedia(video)
       hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}))
+      // Limit retries: hls.startLoad() in an infinite loop never shows the badge.
+      // After 3 network retries or 1 media recovery, hand off to triggerReconnect.
+      let networkRetries = 0
+      let mediaRecovered = false
       hls.on(Hls.Events.ERROR, (_, data) => {
         if (data.fatal) {
-          if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+          if (data.type === Hls.ErrorTypes.NETWORK_ERROR && networkRetries < 3) {
+            networkRetries++
             hls.startLoad()
-          } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+          } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR && !mediaRecovered) {
+            mediaRecovered = true
             hls.recoverMediaError()
           } else {
-            // Unrecoverable — schedule reconnect
             triggerReconnect(cellId)
           }
         }
@@ -179,9 +216,10 @@ export default function MultiviewScreen() {
 
     reconnectTimers.current[cellId] = setTimeout(() => {
       reconnectTimers.current[cellId] = null
+      lastProgressTime.current[cellId] = Date.now()
       loadedUrls.current[cellId] = ''  // force effect to re-load
       setCells((prev) => prev.map((c) => c.id === cellId ? { ...c, reconnecting: false } : c))
-      // loadStream directly since effect checks loadedUrls which we just cleared
+      // Call loadStream directly since effect checks loadedUrls which we just cleared
       loadStream(cellId, url, videoRefs.current[cellId])
       loadedUrls.current[cellId] = url
     }, 3000)
@@ -209,18 +247,59 @@ export default function MultiviewScreen() {
       triggerReconnect(id)
     }, 10000)
   }
-  const handleTimeUpdate = (id: number) => clearStallTimer(id)
+  const handleTimeUpdate = (id: number) => {
+    clearStallTimer(id)
+    lastProgressTime.current[id] = Date.now()
+  }
   const handlePlaying = (id: number) => {
     clearStallTimer(id)
+    lastProgressTime.current[id] = Date.now()
     setCells((prev) => prev.map((c) => c.id === id ? { ...c, reconnecting: false } : c))
   }
 
   useEffect(() => () => {
+    if (overlayHideRef.current) clearTimeout(overlayHideRef.current)
+    if (inactivityRef.current) clearTimeout(inactivityRef.current)
+    if (watchdogRef.current) clearInterval(watchdogRef.current)
     stallTimers.current.forEach((t) => t && clearTimeout(t))
     reconnectTimers.current.forEach((t) => t && clearTimeout(t))
     hlsInstances.current.forEach((h) => h?.destroy())
     mpegtsInstances.current.forEach((p) => p?.destroy())
   }, [])
+
+  // ── Inactivity collapse: after 5s of no mouse activity on the panels, collapse ──
+  const resetInactivityTimer = () => {
+    if (inactivityRef.current) clearTimeout(inactivityRef.current)
+    inactivityRef.current = setTimeout(() => {
+      inactivityRef.current = null
+      setSidebarCollapsed(true)
+      setSidebarOverlay(false)
+    }, 5000)
+  }
+
+  // Start/restart the inactivity timer whenever the sidebar becomes visible
+  useEffect(() => {
+    if (sidebarCollapsed && !sidebarOverlay) {
+      if (inactivityRef.current) { clearTimeout(inactivityRef.current); inactivityRef.current = null }
+      return
+    }
+    resetInactivityTimer()
+    return () => { if (inactivityRef.current) { clearTimeout(inactivityRef.current); inactivityRef.current = null } }
+  }, [sidebarCollapsed, sidebarOverlay]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Sidebar overlay handlers (hover-reveal on desktop) ────────────────────
+  const handleTriggerEnter = () => {
+    if (overlayHideRef.current) { clearTimeout(overlayHideRef.current); overlayHideRef.current = null }
+    setSidebarOverlay(true)
+    resetInactivityTimer()
+  }
+  const handlePanelsMouseEnter = () => {
+    if (overlayHideRef.current) { clearTimeout(overlayHideRef.current); overlayHideRef.current = null }
+    resetInactivityTimer()
+  }
+  const handlePanelsMouseLeave = () => {
+    overlayHideRef.current = setTimeout(() => setSidebarOverlay(false), 400)
+  }
 
   // ── Layout change ──────────────────────────────────────────────────────────
   const changeLayout = (next: MultiviewLayout) => {
@@ -237,7 +316,7 @@ export default function MultiviewScreen() {
   const assignChannel = (ch: Channel) => {
     if (targetCell === null) return
     const cellId = targetCell
-    loadedUrls.current[cellId] = ''  // reset so effect re-loads
+    loadedUrls.current[cellId] = ''
     setCells((prev) => prev.map((c) =>
       c.id === cellId ? { ...c, url: ch.stream_url, title: ch.name, reconnecting: false } : c
     ))
@@ -279,138 +358,164 @@ export default function MultiviewScreen() {
   const cellCount = LAYOUT_CELL_COUNT[layout]
 
   return (
-    <div className="mv-screen">
+    <div className={`mv-screen${sidebarCollapsed ? ' mv-sidebar-collapsed' : ''}${sidebarCollapsed && sidebarOverlay ? ' mv-sidebar-overlay' : ''}`}>
 
-      {/* ── Category pill column ── */}
-      <aside className="mv-categories">
-        <div className="mv-cat-header">
-          <span className="mv-cat-title">Multiview</span>
-          <span className="mv-cat-count">{channels.length}</span>
-        </div>
+      {/* Thin hover-trigger strip on left edge — visible when sidebar is collapsed */}
+      {sidebarCollapsed && (
+        <div className="mv-panels-trigger" onMouseEnter={handleTriggerEnter} />
+      )}
 
-        <div className="mv-playlist-picker">
-          <PlaylistPicker />
-        </div>
+      {/* ── Left panels wrapper (category column + channel panel) ── */}
+      <div
+        className="mv-left-panels"
+        onMouseEnter={handlePanelsMouseEnter}
+        onMouseMove={resetInactivityTimer}
+        onMouseLeave={handlePanelsMouseLeave}
+      >
 
-        <div className="mv-cat-label">LAYOUT</div>
-        <div className="mv-cat-layouts">
-          {(['2H', '2V', '3', '4'] as MultiviewLayout[]).map((l) => (
+        {/* ── Category pill column ── */}
+        <aside className="mv-categories">
+          <div className="mv-cat-header">
+            <span className="mv-cat-title">Multiview</span>
+            <div className="mv-cat-header-actions">
+              <span className="mv-cat-count">{channels.length}</span>
+              <button
+                className="mv-cat-collapse-btn"
+                onClick={() => {
+                  setSidebarCollapsed((v) => !v)
+                  setSidebarOverlay(false)
+                }}
+                title={sidebarCollapsed ? 'Pin sidebar' : 'Hide sidebar'}
+              >
+                {sidebarCollapsed && sidebarOverlay ? '›' : '‹'}
+              </button>
+            </div>
+          </div>
+
+          <div className="mv-playlist-picker">
+            <PlaylistPicker />
+          </div>
+
+          <div className="mv-cat-label">LAYOUT</div>
+          <div className="mv-cat-layouts">
+            {(['2H', '2V', '3', '4'] as MultiviewLayout[]).map((l) => (
+              <button
+                key={l}
+                className={`mv-cat-layout-btn${l === layout ? ' active' : ''}`}
+                onClick={() => changeLayout(l)}
+                title={LAYOUT_LABELS[l]}
+              >
+                {LAYOUT_ICONS[l]}
+              </button>
+            ))}
+          </div>
+
+          <div className="mv-cat-label">PANELS</div>
+          {cells.slice(0, cellCount).map((cell) => (
             <button
-              key={l}
-              className={`mv-cat-layout-btn${l === layout ? ' active' : ''}`}
-              onClick={() => changeLayout(l)}
-              title={LAYOUT_LABELS[l]}
+              key={cell.id}
+              className={`mv-cat-item mv-cat-panel${targetCell === cell.id ? ' active' : ''}`}
+              onClick={() => openPanel(cell.id)}
             >
-              {LAYOUT_ICONS[l]}
+              <span className="cat-dot" />
+              {cell.title ? (
+                <span className="mv-cat-panel-name">{cell.title}</span>
+              ) : (
+                <span className="mv-cat-panel-empty">Panel {cell.id + 1} — empty</span>
+              )}
             </button>
           ))}
-        </div>
 
-        <div className="mv-cat-label">PANELS</div>
-        {cells.slice(0, cellCount).map((cell) => (
+          <div className="mv-cat-sep" />
+
+          <div className="mv-cat-label">FILTER</div>
           <button
-            key={cell.id}
-            className={`mv-cat-item mv-cat-panel${targetCell === cell.id ? ' active' : ''}`}
-            onClick={() => openPanel(cell.id)}
+            className={`mv-cat-item${activeGroup === 'ALL' ? ' active' : ''}`}
+            onClick={() => setActiveGroup('ALL')}
           >
-            <span className="cat-dot" />
-            {cell.title ? (
-              <span className="mv-cat-panel-name">{cell.title}</span>
-            ) : (
-              <span className="mv-cat-panel-empty">Panel {cell.id + 1} — empty</span>
-            )}
+            All Channels
           </button>
-        ))}
-
-        <div className="mv-cat-sep" />
-
-        <div className="mv-cat-label">FILTER</div>
-        <button
-          className={`mv-cat-item${activeGroup === 'ALL' ? ' active' : ''}`}
-          onClick={() => setActiveGroup('ALL')}
-        >
-          All Channels
-        </button>
-        {groups.map((g) => (
-          <button
-            key={g}
-            className={`mv-cat-item${activeGroup === g ? ' active' : ''}`}
-            onClick={() => setActiveGroup(g)}
-          >
-            <span className="cat-dot" />
-            {g}
-          </button>
-        ))}
-      </aside>
-
-      {/* ── Channel list panel ── */}
-      {targetCell !== null && (
-        <aside className="mv-channel-panel">
-          <div className="mv-ch-panel-header">
-            <span>Assign to Panel {targetCell + 1}</span>
-            <button className="mv-ch-panel-close" onClick={() => setTargetCell(null)}>✕</button>
-          </div>
-
-          <div className="mv-ch-panel-search">
-            <input
-              className="mv-search-input"
-              placeholder="Search channels…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              autoFocus
-            />
-          </div>
-
-          <div className="mv-ch-list">
-            {filteredChannels.length === 0 ? (
-              <div className="mv-ch-empty">No channels found</div>
-            ) : (
-              filteredChannels.slice(0, 300).map((ch) => {
-                const isAssigned = cells[targetCell]?.url === ch.stream_url
-                return (
-                  <button
-                    key={ch.id}
-                    className={`mv-ch-item${isAssigned ? ' assigned' : ''}`}
-                    onClick={() => assignChannel(ch)}
-                  >
-                    {ch.logo && (
-                      <img
-                        src={ch.logo}
-                        alt=""
-                        className="mv-ch-logo"
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
-                      />
-                    )}
-                    <span className="mv-ch-name">{ch.name}</span>
-                    {isAssigned && <span className="mv-ch-check">✓</span>}
-                  </button>
-                )
-              })
-            )}
-          </div>
-
-          {!showUrlInput ? (
-            <button className="mv-url-fallback-btn" onClick={() => setShowUrlInput(true)}>
-              Enter URL manually
+          {groups.map((g) => (
+            <button
+              key={g}
+              className={`mv-cat-item${activeGroup === g ? ' active' : ''}`}
+              onClick={() => setActiveGroup(g)}
+            >
+              <span className="cat-dot" />
+              {g}
             </button>
-          ) : (
-            <div className="mv-url-form">
+          ))}
+        </aside>
+
+        {/* ── Channel list panel ── */}
+        {targetCell !== null && (
+          <aside className="mv-channel-panel">
+            <div className="mv-ch-panel-header">
+              <span>Assign to Panel {targetCell + 1}</span>
+              <button className="mv-ch-panel-close" onClick={() => setTargetCell(null)}>✕</button>
+            </div>
+
+            <div className="mv-ch-panel-search">
               <input
-                className="mv-url-input"
-                placeholder="Paste stream URL…"
-                value={urlInput}
-                onChange={(e) => setUrlInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && assignUrl()}
+                className="mv-search-input"
+                placeholder="Search channels…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
                 autoFocus
               />
-              <div className="mv-url-form-actions">
-                <button className="mv-url-back-btn" onClick={() => setShowUrlInput(false)}>← Back</button>
-                <button className="mv-url-ok" onClick={assignUrl}>Play</button>
-              </div>
             </div>
-          )}
-        </aside>
-      )}
+
+            <div className="mv-ch-list">
+              {filteredChannels.length === 0 ? (
+                <div className="mv-ch-empty">No channels found</div>
+              ) : (
+                filteredChannels.slice(0, 300).map((ch) => {
+                  const isAssigned = cells[targetCell]?.url === ch.stream_url
+                  return (
+                    <button
+                      key={ch.id}
+                      className={`mv-ch-item${isAssigned ? ' assigned' : ''}`}
+                      onClick={() => assignChannel(ch)}
+                    >
+                      {ch.logo && (
+                        <img
+                          src={ch.logo}
+                          alt=""
+                          className="mv-ch-logo"
+                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                        />
+                      )}
+                      <span className="mv-ch-name">{ch.name}</span>
+                      {isAssigned && <span className="mv-ch-check">✓</span>}
+                    </button>
+                  )
+                })
+              )}
+            </div>
+
+            {!showUrlInput ? (
+              <button className="mv-url-fallback-btn" onClick={() => setShowUrlInput(true)}>
+                Enter URL manually
+              </button>
+            ) : (
+              <div className="mv-url-form">
+                <input
+                  className="mv-url-input"
+                  placeholder="Paste stream URL…"
+                  value={urlInput}
+                  onChange={(e) => setUrlInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && assignUrl()}
+                  autoFocus
+                />
+                <div className="mv-url-form-actions">
+                  <button className="mv-url-back-btn" onClick={() => setShowUrlInput(false)}>← Back</button>
+                  <button className="mv-url-ok" onClick={assignUrl}>Play</button>
+                </div>
+              </div>
+            )}
+          </aside>
+        )}
+      </div>{/* end mv-left-panels */}
 
       {/* ── Video grid ── */}
       <div className="mv-main">

@@ -247,6 +247,26 @@ export function mapGenre(raw: string | undefined): FixedCategory | null {
 }
 
 /**
+ * True when a normalised catalog name (n) matches a normalised trending title (t).
+ * Both strings must already be lowercased.
+ *
+ * The naive `t.includes(n)` caused false positives for short catalog titles:
+ *   "ma" ⊂ "project hail mary"  → wrong match  ❌
+ * Fix: require the catalog name to appear as a whole word (word-boundary anchored)
+ * and be ≥ 3 characters before attempting the substring direction.
+ */
+export function matchesTrendingTitle(n: string, t: string): boolean {
+  if (n === t) return true
+  if (n.includes(t)) return true // catalog name contains full TMDB title — safe direction
+  if (n.length < 3) return false // too short for reliable word-boundary matching
+  // Reject if catalog name is less than 40% of TMDB title length.
+  // Prevents "the super" (9) matching "the super mario bros. movie" (27).
+  if (n.length < t.length * 0.4) return false
+  const escaped = n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`\\b${escaped}\\b`).test(t)
+}
+
+/**
  * Group items using the Excel-defined category map (sheet name → titles).
  * Category order follows the Excel sheet order. Items not found in the map
  * are collected in an 'Other' bucket appended at the end (hidden if empty).

@@ -1,10 +1,45 @@
-/* ── Root: 3-column flex (categories | channel panel | grid) ── */
+/* ── Root: 3-column flex (left-panels | grid) ── */
 .mv-screen {
   display: flex;
   height: 100%;
   overflow: hidden;
   background: #000;
   position: relative;
+}
+
+/* ── Left panels wrapper (category + channel panel) ── */
+.mv-left-panels {
+  display: flex;
+  flex-shrink: 0;
+  transition: width 0.25s ease;
+  overflow: hidden;
+}
+
+/* Collapsed: zero width, panels hidden behind the edge */
+.mv-sidebar-collapsed .mv-left-panels {
+  width: 0;
+}
+
+/* Overlay: panels slide over the video grid as a floating layer */
+.mv-sidebar-overlay .mv-left-panels {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: auto;
+  overflow: visible;
+  z-index: 50;
+}
+
+/* Thin hover-trigger strip on left edge when sidebar is collapsed */
+.mv-panels-trigger {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 16px;
+  height: 100%;
+  z-index: 40;
+  cursor: pointer;
 }
 
 /* ── Category pill column — mirrors livetv-categories ── */
@@ -23,9 +58,13 @@
   overflow-x: hidden;
   scrollbar-width: none;
   box-shadow: 0 0 40px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.04);
-  flex-shrink: 0;
 }
 .mv-categories::-webkit-scrollbar { display: none; }
+
+/* In overlay mode add shadow so panels float above video */
+.mv-sidebar-overlay .mv-categories {
+  box-shadow: 0 0 60px rgba(0,0,0,0.9), inset 0 1px 0 rgba(255,255,255,0.04);
+}
 
 .mv-cat-header {
   display: flex;
@@ -39,6 +78,11 @@
   font-weight: 700;
   color: var(--text-primary);
 }
+.mv-cat-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
 .mv-cat-count {
   font-size: 12px;
   color: var(--text-muted);
@@ -46,6 +90,18 @@
   padding: 2px 7px;
   border-radius: 10px;
 }
+.mv-cat-collapse-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+  transition: color 0.15s;
+  flex-shrink: 0;
+}
+.mv-cat-collapse-btn:hover { color: var(--text-primary); }
 
 .mv-playlist-picker {
   padding: 4px 10px 10px;
@@ -410,7 +466,7 @@
 .mv-reconnect-badge {
   position: absolute;
   top: 8px;
-  right: 8px;
+  right: 36px; /* clear of the edit button */
   display: flex;
   align-items: center;
   gap: 6px;

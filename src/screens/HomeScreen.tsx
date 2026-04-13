@@ -5,7 +5,7 @@ import HeroBanner from '../components/common/HeroBanner'
 import HorizontalRow from '../components/common/HorizontalRow'
 import { usePlaylistStore } from '../store/slices/playlistSlice'
 import { useUiStore } from '../store/slices/uiSlice'
-import { groupByExcelCategories, deduplicateItems, extractBaseTitle } from '../utils/genreMap'
+import { groupByExcelCategories, deduplicateItems, extractBaseTitle, matchesTrendingTitle } from '../utils/genreMap'
 import { MOVIE_CATEGORY_ORDER, MOVIE_TITLE_MAP } from '../data/movieCategories'
 import { SERIES_CATEGORY_ORDER, SERIES_TITLE_MAP } from '../data/seriesCategories'
 import type { Series, VodItem } from '../types'
@@ -86,7 +86,7 @@ export default function HomeScreen() {
         const match = vods.find((v) => {
           if (used.has(v.id)) return false
           const n = (extractBaseTitle(v.name) || v.name).toLowerCase()
-          return n === t || n.includes(t) || t.includes(n)
+          return matchesTrendingTitle(n, t)
         })
         if (match) {
           used.add(match.id)
@@ -123,7 +123,7 @@ export default function HomeScreen() {
         const match = vods.find((v) => {
           if (used.has(v.id)) return false
           const n = (extractBaseTitle(v.name) || v.name).toLowerCase()
-          return n === t || n.includes(t) || t.includes(n)
+          return matchesTrendingTitle(n, t)
         })
         if (match) { used.add(match.id); result.push(match) }
       }
@@ -141,7 +141,7 @@ export default function HomeScreen() {
         const match = series.find((s) => {
           if (used.has(s.id)) return false
           const n = (extractBaseTitle(s.name) || s.name).toLowerCase()
-          return n === t || n.includes(t) || t.includes(n)
+          return matchesTrendingTitle(n, t)
         })
         if (match) {
           used.add(match.id)
@@ -174,7 +174,7 @@ export default function HomeScreen() {
         const match = series.find((s) => {
           if (used.has(s.id)) return false
           const n = (extractBaseTitle(s.name) || s.name).toLowerCase()
-          return n === t || n.includes(t) || t.includes(n)
+          return matchesTrendingTitle(n, t)
         })
         if (match) { used.add(match.id); result.push(match) }
       }
@@ -220,7 +220,7 @@ export default function HomeScreen() {
       {heroItems.length > 0 && (
         <HeroBanner
           items={heroItems}
-          onSelect={(item) => navigate('stream_url' in item ? '/vod' : '/series', { state: { preSelectedId: item.id } })}
+          onSelect={(item) => navigate('stream_url' in item ? '/vod' : '/series', { state: { preSelectedItem: item } })}
         />
       )}
 
@@ -276,7 +276,7 @@ export default function HomeScreen() {
                     name={v.name}
                     rating={v.rating}
                     versions={'_versions' in v ? (v as { _versions: unknown[] })._versions.length : 1}
-                    onClick={() => navigate('/vod', { state: { preSelectedId: v.id } })}
+                    onClick={() => navigate('/vod', { state: { preSelectedItem: v } })}
                   />
                 ))}
               </HorizontalRow>
@@ -302,7 +302,7 @@ export default function HomeScreen() {
                     name={s.name}
                     rating={s.rating}
                     versions={'_versions' in s ? (s as { _versions: unknown[] })._versions.length : 1}
-                    onClick={() => navigate('/series', { state: { preSelectedId: s.id } })}
+                    onClick={() => navigate('/series', { state: { preSelectedItem: s } })}
                   />
                 ))}
               </HorizontalRow>
