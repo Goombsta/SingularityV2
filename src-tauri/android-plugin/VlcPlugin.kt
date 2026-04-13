@@ -157,7 +157,7 @@ class VlcPlugin(private val activity: android.app.Activity) : Plugin(activity) {
                 session.libVLC.release()
                 val contentFrame = activity.findViewById<FrameLayout>(android.R.id.content)
                 contentFrame?.removeView(session.layout)
-            } catch (_: Exception) { /* always clean up */ }
+            } catch (e: Exception) { /* always clean up */ }
             invoke.resolve()
         }
     }

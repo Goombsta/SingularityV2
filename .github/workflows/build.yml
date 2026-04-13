@@ -171,7 +171,6 @@ jobs:
           DEST="src-tauri/gen/android/app/src/main/java/com/singularity/app"
           cp src-tauri/android-plugin/VlcPlugin.kt "$DEST/"
           cp src-tauri/android-plugin/UpdaterPlugin.kt "$DEST/"
-          cp src-tauri/android-plugin/CredentialPlugin.kt "$DEST/" 2>/dev/null || true
           echo "Plugin files copied:"
           ls -la "$DEST/"
 
