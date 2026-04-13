@@ -83,10 +83,15 @@ export default function HomeScreen() {
       const result: VodItem[] = []
       for (const tmdb of tmdbTrendingMovies) {
         const t = (extractBaseTitle(tmdb.title) || tmdb.title).toLowerCase()
+        const tYear = tmdb.releaseDate?.slice(0, 4)
         const match = vods.find((v) => {
           if (used.has(v.id)) return false
           const n = (extractBaseTitle(v.name) || v.name).toLowerCase()
-          return matchesTrendingTitle(n, t)
+          if (!matchesTrendingTitle(n, t)) return false
+          if (tYear && v.year) {
+            if (Math.abs(parseInt(v.year) - parseInt(tYear)) > 1) return false
+          }
+          return true
         })
         if (match) {
           used.add(match.id)
@@ -138,10 +143,15 @@ export default function HomeScreen() {
       const result: Series[] = []
       for (const tmdb of tmdbTrendingTv) {
         const t = (extractBaseTitle(tmdb.title) || tmdb.title).toLowerCase()
+        const tYear = tmdb.releaseDate?.slice(0, 4)
         const match = series.find((s) => {
           if (used.has(s.id)) return false
           const n = (extractBaseTitle(s.name) || s.name).toLowerCase()
-          return matchesTrendingTitle(n, t)
+          if (!matchesTrendingTitle(n, t)) return false
+          if (tYear && s.year) {
+            if (Math.abs(parseInt(s.year) - parseInt(tYear)) > 1) return false
+          }
+          return true
         })
         if (match) {
           used.add(match.id)

@@ -146,14 +146,40 @@ const GENRE_RULES: { category: FixedCategory; keywords: string[] }[] = [
 /**
  * Extract a region/language code from an item name.
  * Handles "|US| Title", "EN - Title", "UK - Title", "FR - Title" etc.
- * Returns the code (uppercase) or 'Default' if not found.
+ * Returns the code (uppercase) or null if not found.
  */
-export function extractRegion(name: string): string {
+export function extractRegion(name: string): string | null {
   const pipeMatch = name.match(/^\|([A-Z]{2,4})\|/)
   if (pipeMatch) return pipeMatch[1]
   // Match "FR-4k", "EN - ", "ES: " — no space required after separator
   const dashMatch = name.match(/^([A-Z]{2,3})\s*[-:]/)
   if (dashMatch) return dashMatch[1]
+  return null
+}
+
+const QUALITY_ORDER = ['4K', 'UHD', 'FHD', 'HD', 'SD'] as const
+type Quality = typeof QUALITY_ORDER[number]
+
+/**
+ * Extract a quality token from an item name (scans full name, not just prefix).
+ * Returns '4K', 'UHD', 'FHD', 'HD', 'SD', or null.
+ */
+export function extractQuality(name: string): Quality | null {
+  const u = name.toUpperCase()
+  if (/\b(4K|UHD)\b/.test(u)) return '4K'
+  if (/\bFHD\b/.test(u)) return 'FHD'
+  if (/\bHD\b/.test(u)) return 'HD'
+  if (/\bSD\b/.test(u)) return 'SD'
+  return null
+}
+
+/** Build the human-readable version label for the dropdown. */
+function buildVersionLabel(name: string): string {
+  const region = extractRegion(name)
+  const quality = extractQuality(name)
+  if (region && quality) return `${region} ${quality}`
+  if (region) return region
+  if (quality) return quality
   return 'Default'
 }
 
@@ -186,7 +212,10 @@ export function extractBaseTitle(name: string): string {
     // Strip trailing quality (requires leading space — avoids stripping from position 0)
     .replace(QUALITY_TRAILING, '')
     // Strip trailing standalone region code: " EN", " FR", " US"
-    .replace(/\s+[A-Z]{2,3}$/, '')
+    // Exclude roman numerals (II, III, IV, VI, VII, IX) so sequel markers are preserved
+    .replace(/\s+([A-Z]{2,3})$/, (m, code) =>
+      /^(II|III|IV|VI|VII|IX|XI|XII)$/.test(code) ? m : ''
+    )
     .trim()
 }
 
@@ -197,28 +226,41 @@ export type VersionedItem<T> = T & {
 
 /**
  * Group items that share the same base title into a single card with multiple versions.
- * EN version is preferred as the primary. Regions like EN, ES, UK, FR are extracted
- * from name prefixes ("EN - Title", "|US| Title").
+ * Label priority: EN > highest quality (4K > FHD > HD > SD) > first.
+ * Duplicate labels within a group are disambiguated by appending (2), (3), …
  */
-export function deduplicateItems<T extends { name: string }>(items: T[]): VersionedItem<T>[] {
+export function deduplicateItems<T extends { name: string; stream_id?: number | string }>(items: T[]): VersionedItem<T>[] {
   const groups = new Map<string, Array<T & { _region: string }>>()
 
   for (const item of items) {
     const base = extractBaseTitle(item.name).toLowerCase().trim()
     const key = base || item.name.toLowerCase()
-    const region = extractRegion(item.name)
+    const label = buildVersionLabel(item.name)
     if (!groups.has(key)) groups.set(key, [])
-    groups.get(key)!.push({ ...item, _region: region })
+    groups.get(key)!.push({ ...item, _region: label })
   }
 
   const result: VersionedItem<T>[] = []
   for (const versions of groups.values()) {
-    // Prefer EN as primary, then Default, then first available
+    // De-duplicate identical labels within group
+    const seen = new Map<string, number>()
+    const labeled = versions.map((v) => {
+      const base = v._region
+      const count = (seen.get(base) ?? 0) + 1
+      seen.set(base, count)
+      return count === 1 ? v : { ...v, _region: `${base} (${count})` }
+    })
+
+    // Pick primary: EN first, then highest quality, then first
     const primary =
-      versions.find((v) => v._region === 'EN') ??
-      versions.find((v) => v._region === 'Default') ??
-      versions[0]
-    result.push({ ...primary, _versions: versions })
+      labeled.find((v) => v._region.startsWith('EN')) ??
+      QUALITY_ORDER.reduce<(T & { _region: string }) | undefined>(
+        (best, q) => best ?? labeled.find((v) => v._region.includes(q)),
+        undefined,
+      ) ??
+      labeled[0]
+
+    result.push({ ...primary, _versions: labeled })
   }
   return result
 }
@@ -247,23 +289,72 @@ export function mapGenre(raw: string | undefined): FixedCategory | null {
 }
 
 /**
- * True when a normalised catalog name (n) matches a normalised trending title (t).
- * Both strings must already be lowercased.
+ * Normalize a title for strict matching comparisons.
+ * Lowercases, strips punctuation, expands & → and, removes leading articles,
+ * and collapses whitespace so "The Super Mario Bros. Movie" and
+ * "super mario bros movie" compare as equivalent.
+ */
+export function normalizeTitleForMatch(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[''`!?,.()\[\]{}'":]/g, '')
+    .replace(/[-–—]/g, ' ')
+    .replace(/^(the|a|an)\s+/, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+}
+
+// ── Sequel-marker helpers ────────────────────────────────────────────────────
+const SEQUEL_RE = /\s+(part\s+)?(ii|iii|iv|v|vi|vii|viii|ix|x|\d+)$/i
+const ROMAN_MAP: Record<string, string> = {
+  ii: '2', iii: '3', iv: '4', v: '5', vi: '6', vii: '7', viii: '8', ix: '9', x: '10',
+}
+
+function extractSequelMarker(s: string): string | null {
+  const m = s.match(SEQUEL_RE)
+  if (!m) return null
+  const raw = m[2].toLowerCase()
+  return ROMAN_MAP[raw] ?? raw
+}
+
+function stripSequelMarker(s: string): string {
+  return s.replace(SEQUEL_RE, '').trim()
+}
+
+/**
+ * True when a catalog name (n) and a trending title (t) refer to the same work.
  *
- * The naive `t.includes(n)` caused false positives for short catalog titles:
- *   "ma" ⊂ "project hail mary"  → wrong match  ❌
- * Fix: require the catalog name to appear as a whole word (word-boundary anchored)
- * and be ≥ 3 characters before attempting the substring direction.
+ * Sequel-aware matching:
+ * 1. Exact equality after normalization → match.
+ * 2. If sequel markers differ (e.g. "Clerks" vs "Clerks II") → reject.
+ * 3. Strip markers, compare bases: every word of shorter appears in longer,
+ *    AND shorter ≥ 50% of longer length.
+ *
+ * Callers should pass extractBaseTitle() output (region/quality already stripped).
  */
 export function matchesTrendingTitle(n: string, t: string): boolean {
-  if (n === t) return true
-  if (n.includes(t)) return true // catalog name contains full TMDB title — safe direction
-  if (n.length < 3) return false // too short for reliable word-boundary matching
-  // Reject if catalog name is less than 40% of TMDB title length.
-  // Prevents "the super" (9) matching "the super mario bros. movie" (27).
-  if (n.length < t.length * 0.4) return false
-  const escaped = n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  return new RegExp(`\\b${escaped}\\b`).test(t)
+  if (n.length < 3 || t.length < 3) return false
+  const nn = normalizeTitleForMatch(n)
+  const nt = normalizeTitleForMatch(t)
+  if (!nn || !nt) return false
+  if (nn === nt) return true
+
+  // Sequel markers must agree — "Clerks" (null) ≠ "Clerks II" ("2")
+  const nMark = extractSequelMarker(nn)
+  const tMark = extractSequelMarker(nt)
+  if (nMark !== tMark) return false
+
+  // Strip markers and compare bases
+  const nBase = nMark ? stripSequelMarker(nn) : nn
+  const tBase = tMark ? stripSequelMarker(nt) : nt
+  if (nBase === tBase) return true
+
+  const [shorter, longer] = nBase.length <= tBase.length ? [nBase, tBase] : [tBase, nBase]
+  if (shorter.length / longer.length < 0.5) return false
+  const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const words = shorter.split(' ').filter((w) => w.length > 0)
+  return words.every((w) => new RegExp(`\\b${escape(w)}\\b`).test(longer))
 }
 
 /**

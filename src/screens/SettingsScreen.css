@@ -412,15 +412,23 @@
   gap: 10px;
 }
 .about-download-btn {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
   padding: 9px 24px;
   background: linear-gradient(135deg, #4f6ef7 0%, #7c3aed 100%);
   color: white;
+  border: none;
   border-radius: 8px;
   font-size: 13px;
   font-weight: 600;
+  font-family: inherit;
   text-decoration: none;
   letter-spacing: 0.02em;
+  cursor: pointer;
   transition: opacity 0.15s, transform 0.1s;
 }
-.about-download-btn:hover { opacity: 0.88; transform: translateY(-1px); }
+.about-download-btn:hover:not(:disabled) { opacity: 0.88; transform: translateY(-1px); }
+.about-download-btn:disabled { cursor: not-allowed; }
+.about-download-btn.checking { opacity: 0.75; }

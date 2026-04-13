@@ -453,7 +453,7 @@ function IntegrationsSettings() {
   )
 }
 
-type UpdateState = 'idle' | 'checking' | 'up-to-date' | 'update-available' | 'error'
+type UpdateState = 'idle' | 'checking' | 'up-to-date' | 'update-available' | 'downloading' | 'downloaded' | 'download-error' | 'error'
 
 function compareVersions(a: string, b: string): number {
   const pa = a.split('.').map(Number)
@@ -469,7 +469,9 @@ function AboutSettings() {
   const [version, setVersion] = useState<string | null>(null)
   const [updateState, setUpdateState] = useState<UpdateState>('idle')
   const [latestVersion, setLatestVersion] = useState<string | null>(null)
+  const [downloadedPath, setDownloadedPath] = useState<string | null>(null)
   const currentPlatform = (() => { try { return platform() } catch { return 'windows' } })()
+  const isAndroid = currentPlatform === 'android'
 
   useEffect(() => {
     getVersion().then(setVersion).catch(() => setVersion(null))
@@ -490,9 +492,36 @@ function AboutSettings() {
     }
   }
 
-  const downloadUrl = currentPlatform === 'android'
+  const downloadUrl = isAndroid
     ? 'https://www.singularitytv.app/downloads/Singularitydeux.apk'
     : 'https://www.singularitytv.app/downloads/Singularitydeux.Setup.exe'
+  const downloadFilename = isAndroid
+    ? `Singularity-${latestVersion ?? 'update'}.apk`
+    : `Singularity-${latestVersion ?? 'update'}-Setup.exe`
+
+  const downloadUpdate = async () => {
+    if (updateState === 'downloading') return
+    setUpdateState('downloading')
+    try {
+      const path = await invoke<string>('download_update', {
+        url: downloadUrl,
+        filename: downloadFilename,
+      })
+      setDownloadedPath(path)
+      setUpdateState('downloaded')
+    } catch {
+      setUpdateState('download-error')
+    }
+  }
+
+  const installUpdate = async () => {
+    if (!downloadedPath) return
+    try {
+      await invoke('install_update', { path: downloadedPath })
+    } catch {
+      setUpdateState('download-error')
+    }
+  }
 
   return (
     <div className="settings-section">
@@ -522,12 +551,29 @@ function AboutSettings() {
           {updateState === 'error' && (
             <p className="about-status fail">Could not reach update server</p>
           )}
-          {updateState === 'update-available' && latestVersion && (
+          {(updateState === 'update-available' || updateState === 'downloading' || updateState === 'downloaded' || updateState === 'download-error') && latestVersion && (
             <div className="about-update-available">
               <p className="about-status update">v{latestVersion} is available</p>
-              <a href={downloadUrl} target="_blank" rel="noreferrer" className="about-download-btn">
-                Download Update
-              </a>
+              {isAndroid ? (
+                <a href={downloadUrl} target="_blank" rel="noreferrer" className="about-download-btn">
+                  Download Update
+                </a>
+              ) : updateState === 'downloading' ? (
+                <button className="about-download-btn checking" disabled>
+                  <span className="about-spinner" />Downloading…
+                </button>
+              ) : updateState === 'downloaded' ? (
+                <button className="about-download-btn" onClick={installUpdate}>
+                  Install Update
+                </button>
+              ) : (
+                <button className="about-download-btn" onClick={downloadUpdate}>
+                  Download Update
+                </button>
+              )}
+              {updateState === 'download-error' && (
+                <p className="about-status fail">Download failed — try again</p>
+              )}
             </div>
           )}
         </div>

@@ -178,6 +178,80 @@ pub async fn fetch_tmdb_trending(
     }).collect())
 }
 
+// ── Similar / Recommendations response ──────────────────────────────────────
+
+#[derive(Deserialize)]
+struct SimilarResponse {
+    results: Vec<TrendingResult>,
+}
+
+/// Fetch curated similar titles for a given TMDB ID.
+/// Calls /recommendations first (editorial), then /similar (tag-based), merges, de-dups.
+/// Returns at most 30 items reusing the TmdbTrendingItem shape.
+#[tauri::command]
+pub async fn fetch_tmdb_similar(
+    tmdb_id: u64,
+    media_type: String,
+    api_key: String,
+) -> Result<Vec<TmdbTrendingItem>, String> {
+    if api_key.trim().is_empty() {
+        return Err("No TMDB API key configured.".into());
+    }
+    let kind = if media_type == "tv" { "tv" } else { "movie" };
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let rec_url = format!(
+        "https://api.themoviedb.org/3/{}/{}/recommendations?api_key={}&language=en-US&page=1",
+        kind, tmdb_id, api_key.trim()
+    );
+    let sim_url = format!(
+        "https://api.themoviedb.org/3/{}/{}/similar?api_key={}&language=en-US&page=1",
+        kind, tmdb_id, api_key.trim()
+    );
+
+    let (rec_resp, sim_resp) = tokio::join!(
+        client.get(&rec_url).send(),
+        client.get(&sim_url).send(),
+    );
+
+    let mut seen = std::collections::HashSet::new();
+    let mut merged: Vec<TmdbTrendingItem> = Vec::new();
+
+    let parse = |results: Vec<TrendingResult>| -> Vec<TmdbTrendingItem> {
+        results.into_iter().map(|r| TmdbTrendingItem {
+            tmdb_id: r.id,
+            title: r.title.or(r.name).unwrap_or_default(),
+            overview: r.overview.unwrap_or_default(),
+            poster_url: r.poster_path.filter(|p| !p.is_empty()).map(|p| format!("{}{}", IMG_W500, p)),
+            backdrop_url: r.backdrop_path.filter(|p| !p.is_empty()).map(|p| format!("{}{}", IMG_W1280, p)),
+            vote_average: r.vote_average.unwrap_or(0.0),
+            release_date: r.release_date.or(r.first_air_date).unwrap_or_default(),
+            media_type: kind.to_string(),
+        }).collect()
+    };
+
+    if let Ok(r) = rec_resp {
+        if let Ok(body) = r.json::<SimilarResponse>().await {
+            for item in parse(body.results) {
+                if seen.insert(item.tmdb_id) { merged.push(item); }
+            }
+        }
+    }
+    if let Ok(r) = sim_resp {
+        if let Ok(body) = r.json::<SimilarResponse>().await {
+            for item in parse(body.results) {
+                if seen.insert(item.tmdb_id) { merged.push(item); }
+            }
+        }
+    }
+
+    merged.truncate(30);
+    Ok(merged)
+}
+
 // ── Tauri command ─────────────────────────────────────────────────────────────
 
 /// Fetch movie or TV metadata from TMDB v3.
