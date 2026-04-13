@@ -86,6 +86,7 @@ pub fn run() {
             // TMDB metadata
             commands::tmdb::fetch_tmdb,
             commands::tmdb::fetch_tmdb_trending,
+            commands::tmdb::fetch_tmdb_similar,
             // IMDb trending
             commands::trending::fetch_imdb_trending,
             // Native MPV — desktop only
@@ -117,6 +118,11 @@ pub fn run() {
             commands::player::mpv_set_sub_track,
             #[cfg(not(target_os = "android"))]
             commands::player::mpv_set_sub_scale,
+            // Updater — desktop only
+            #[cfg(not(target_os = "android"))]
+            commands::updater::download_update,
+            #[cfg(not(target_os = "android"))]
+            commands::updater::install_update,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Singularity");

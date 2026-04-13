@@ -6,3 +6,5 @@ pub mod omdb;
 pub mod tmdb;
 pub mod trending;
 pub mod player;
+#[cfg(not(target_os = "android"))]
+pub mod updater;

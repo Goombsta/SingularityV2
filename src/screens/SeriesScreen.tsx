@@ -5,7 +5,7 @@ import PlaylistPicker from '../components/common/PlaylistPicker'
 import HorizontalRow from '../components/common/HorizontalRow'
 import { usePlaylistStore } from '../store/slices/playlistSlice'
 import { useUiStore } from '../store/slices/uiSlice'
-import { groupByExcelCategories, deduplicateItems, extractBaseTitle } from '../utils/genreMap'
+import { groupByExcelCategories, deduplicateItems, extractBaseTitle, matchesTrendingTitle, mapGenre } from '../utils/genreMap'
 import { SERIES_CATEGORY_ORDER, SERIES_TITLE_MAP } from '../data/seriesCategories'
 import type { VersionedItem } from '../utils/genreMap'
 import type { Episode, FavoriteItem, Series, SeriesInfo } from '../types'
@@ -16,7 +16,8 @@ export default function SeriesScreen() {
   const { addFavorite, removeFavorite, isFavorite } = useUiStore()
   const [search, setSearch] = useState('')
   const [imdbTv, setImdbTv] = useState<string[]>([])
-  const [tmdbTrendingTv, setTmdbTrendingTv] = useState<{ title: string }[]>([])
+  const [tmdbTrendingTv, setTmdbTrendingTv] = useState<{ title: string; tmdbId?: number; releaseDate?: string }[]>([])
+  const [similarTmdb, setSimilarTmdb] = useState<{ tmdbId: number; title: string; overview: string; posterUrl?: string; backdropUrl?: string; voteAverage: number; releaseDate: string }[]>([])
   const [selected, setSelected] = useState<SeriesInfo | null>(null)
   const [selectedVersions, setSelectedVersions] = useState<Array<Series & { _region: string }>>([])
   const [selectedRegion, setSelectedRegion] = useState<string>('Default')
@@ -74,37 +75,89 @@ export default function SeriesScreen() {
   }, [deduped])
 
   const byGenreWithTrending = useMemo(() => {
-    const titleList = tmdbTrendingTv.length > 0
-      ? tmdbTrendingTv.map((t) => t.title)
-      : imdbTv
-    if (titleList.length === 0) return byGenre
-    const used = new Set<string>()
-    const trending: typeof series = []
-    for (const trendTitle of titleList) {
-      const t = (extractBaseTitle(trendTitle) || trendTitle).toLowerCase()
-      const match = series.find((s) => {
-        if (used.has(s.id)) return false
-        const n = (extractBaseTitle(s.name) || s.name).toLowerCase()
-        return n === t || n.includes(t) || t.includes(n)
-      })
-      if (match) { used.add(match.id); trending.push(match) }
+    if (tmdbTrendingTv.length > 0) {
+      const used = new Set<string>()
+      const trending: typeof series = []
+      for (const tmdbItem of tmdbTrendingTv) {
+        const t = (extractBaseTitle(tmdbItem.title) || tmdbItem.title).toLowerCase()
+        const tYear = tmdbItem.releaseDate?.slice(0, 4)
+        const match = series.find((s) => {
+          if (used.has(s.id)) return false
+          const n = (extractBaseTitle(s.name) || s.name).toLowerCase()
+          if (!matchesTrendingTitle(n, t)) return false
+          if (tYear && s.year) {
+            if (Math.abs(parseInt(s.year) - parseInt(tYear)) > 1) return false
+          }
+          return true
+        })
+        if (match) { used.add(match.id); trending.push(match) }
+      }
+      return byGenre.map(([cat, items]) =>
+        cat === 'Trending Now' ? [cat, trending] as [typeof cat, typeof items] : [cat, items] as [typeof cat, typeof items]
+      )
     }
-    return byGenre.map(([cat, items]) =>
-      cat === 'Trending Now' ? [cat, trending] as [typeof cat, typeof items] : [cat, items] as [typeof cat, typeof items]
-    )
+    if (imdbTv.length > 0) {
+      const used = new Set<string>()
+      const trending: typeof series = []
+      for (const trendTitle of imdbTv) {
+        const t = (extractBaseTitle(trendTitle) || trendTitle).toLowerCase()
+        const match = series.find((s) => {
+          if (used.has(s.id)) return false
+          const n = (extractBaseTitle(s.name) || s.name).toLowerCase()
+          return matchesTrendingTitle(n, t)
+        })
+        if (match) { used.add(match.id); trending.push(match) }
+      }
+      return byGenre.map(([cat, items]) =>
+        cat === 'Trending Now' ? [cat, trending] as [typeof cat, typeof items] : [cat, items] as [typeof cat, typeof items]
+      )
+    }
+    return byGenre
   }, [byGenre, series, tmdbTrendingTv, imdbTv])
 
   const similar = useMemo(() => {
-    if (!selected || !selected.series.genre) return []
-    return series
-      .filter((s) => s.id !== selected.series.id && s.genre === selected.series.genre)
-      .sort((a, b) => parseInt(b.year || '0') - parseInt(a.year || '0'))
-      .slice(0, 20)
-  }, [selected, series])
+    if (!selected) return []
+
+    // Tier 1: TMDB curated recommendations
+    if (similarTmdb.length > 0) {
+      const used = new Set<string>()
+      const rows: Series[] = []
+      for (const s of similarTmdb) {
+        const t = (extractBaseTitle(s.title) || s.title).toLowerCase()
+        const tYear = s.releaseDate?.slice(0, 4)
+        const match = series.find((v) => {
+          if (used.has(v.id) || v.id === selected.series.id) return false
+          const n = (extractBaseTitle(v.name) || v.name).toLowerCase()
+          if (!matchesTrendingTitle(n, t)) return false
+          if (tYear && v.year) {
+            if (Math.abs(parseInt(v.year) - parseInt(tYear)) > 1) return false
+          }
+          return true
+        })
+        if (match) {
+          used.add(match.id)
+          rows.push({ ...match, poster: s.posterUrl || match.poster, rating: s.voteAverage ? String(s.voteAverage) : match.rating })
+        }
+        if (rows.length >= 20) break
+      }
+      if (rows.length > 0) return rows
+    }
+
+    // Tier 2: mapGenre category fallback
+    const selCat = mapGenre(selected.series.genre) ?? mapGenre(selected.series.name)
+    if (selCat) {
+      return series
+        .filter((s) => s.id !== selected.series.id && (mapGenre(s.genre) ?? mapGenre(s.name)) === selCat)
+        .sort((a, b) => parseInt(b.year || '0') - parseInt(a.year || '0'))
+        .slice(0, 20)
+    }
+    return []
+  }, [selected, similarTmdb, series])
 
   const handleSelectSeries = async (s: Series | VersionedItem<Series>, keepVersions?: boolean) => {
     if (!activePlaylistId || !s.series_id) return
     setLoadingInfo(true)
+    setSimilarTmdb([])
     try {
       const info = await fetchSeriesInfo(activePlaylistId, s.series_id)
       setSelected(info)
@@ -118,6 +171,22 @@ export default function SeriesScreen() {
       const firstSeason = Object.keys(info.seasons).sort((a, b) => Number(a) - Number(b))[0] ?? '1'
       setSelectedSeason(firstSeason)
       window.scrollTo(0, 0)
+
+      // Fetch TMDB similar in background
+      ;(async () => {
+        try {
+          const tmdbKey = await invoke<string | null>('get_credential', { key: 'tmdb_api_key' }).catch(() => null) || localStorage.getItem('tmdb_api_key') || ''
+          if (!tmdbKey) return
+          const cleanName = extractBaseTitle(info.series.name) || info.series.name
+          const meta = await invoke<{ tmdbId: number }>('fetch_tmdb', {
+            title: cleanName, year: info.series.year ?? null, mediaType: 'tv', apiKey: tmdbKey,
+          })
+          const sim = await invoke<typeof similarTmdb>('fetch_tmdb_similar', {
+            tmdbId: meta.tmdbId, mediaType: 'tv', apiKey: tmdbKey,
+          })
+          setSimilarTmdb(sim)
+        } catch { /* no TMDB key or title not found — similar stays empty */ }
+      })()
     } finally {
       setLoadingInfo(false)
     }
@@ -152,7 +221,13 @@ export default function SeriesScreen() {
         )}
 
         <div className="detail-body">
-          <button className="detail-back" onClick={() => setSelected(null)}>← Back</button>
+          <button className="detail-back" onClick={() => {
+            if (routeState?.preSelectedItem || routeState?.preSelectedId) {
+              navigate(-1)
+            } else {
+              setSelected(null)
+            }
+          }}>← Back</button>
 
           <div className="detail-hero">
             {s.poster && <img src={s.poster} alt={s.name} className="detail-poster" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />}

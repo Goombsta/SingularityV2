@@ -83,12 +83,14 @@ export default function HeroBanner({ items, onSelect }: HeroBannerProps) {
   const displayGenres = tmdbData?.genres?.slice(0, 2) ?? []
   const cleanTitle = extractBaseTitle(item.name) || item.name
 
-  const handlePlay = () => {
-    if (isVod) navigate('/player', { state: { url: (item as VodItem).stream_url, title: cleanTitle } })
-  }
   const handleDetails = () => {
     if (onSelect) { onSelect(item); return }
-    navigate(isVod ? '/vod' : '/series', { state: { preSelectedId: item.id } })
+    navigate(isVod ? '/vod' : '/series', { state: { preSelectedItem: item } })
+  }
+  const handlePlay = () => {
+    const url = isVod ? (item as VodItem).stream_url : ''
+    if (url) navigate('/player', { state: { url, title: cleanTitle, live: false } })
+    else handleDetails() // no stream available — fall back to details view
   }
 
   return (

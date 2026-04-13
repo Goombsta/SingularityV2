@@ -129,10 +129,24 @@
   font-size: 28px;
   font-weight: 800;
   letter-spacing: 0.12em;
-  background: linear-gradient(135deg, var(--accent) 0%, var(--pink-dark) 100%);
+  background: linear-gradient(
+    90deg,
+    #7c3aed 0%,
+    #a78bfa 30%,
+    #ffffff 50%,
+    #a78bfa 70%,
+    #7c3aed 100%
+  );
+  background-size: 200% auto;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+  animation: splash-shimmer 3s ease-in-out infinite alternate;
+}
+
+@keyframes splash-shimmer {
+  0%   { background-position: 0% center; }
+  100% { background-position: 200% center; }
 }
 .splash-spinner {
   width: 36px;

@@ -6,7 +6,7 @@ import PlaylistPicker from '../components/common/PlaylistPicker'
 import HorizontalRow from '../components/common/HorizontalRow'
 import { usePlaylistStore } from '../store/slices/playlistSlice'
 import { useUiStore } from '../store/slices/uiSlice'
-import { groupByExcelCategories, deduplicateItems, extractBaseTitle, matchesTrendingTitle } from '../utils/genreMap'
+import { groupByExcelCategories, deduplicateItems, extractBaseTitle, matchesTrendingTitle, mapGenre } from '../utils/genreMap'
 import { MOVIE_CATEGORY_ORDER, MOVIE_TITLE_MAP } from '../data/movieCategories'
 import type { VersionedItem } from '../utils/genreMap'
 import type { FavoriteItem, VodItem } from '../types'
@@ -47,6 +47,7 @@ export default function VodScreen() {
   const [selected, setSelected] = useState<VersionedItem<VodItem> | null>(null)
   const [tmdb, setTmdb] = useState<TmdbMeta | null>(null)
   const [omdb, setOmdb] = useState<OmdbMeta | null>(null)
+  const [similarTmdb, setSimilarTmdb] = useState<TmdbTrendingItem[]>([])
   const [imdbMovies, setImdbMovies] = useState<string[]>([])
   const [tmdbTrendingMovies, setTmdbTrendingMovies] = useState<TmdbTrendingItem[]>([])
 
@@ -86,6 +87,7 @@ export default function VodScreen() {
   const fetchMeta = async (name: string, year?: string) => {
     setTmdb(null)
     setOmdb(null)
+    setSimilarTmdb([])
     const tmdbKey = await invoke<string | null>('get_credential', { key: 'tmdb_api_key' }).catch(() => null) || localStorage.getItem('tmdb_api_key') || ''
     if (tmdbKey) {
       try {
@@ -93,6 +95,10 @@ export default function VodScreen() {
           title: name, year: year ?? null, mediaType: 'movie', apiKey: tmdbKey,
         })
         setTmdb(meta)
+        // Fetch curated similar titles in the background — don't await
+        invoke<TmdbTrendingItem[]>('fetch_tmdb_similar', {
+          tmdbId: meta.tmdbId, mediaType: 'movie', apiKey: tmdbKey,
+        }).then(setSimilarTmdb).catch(() => {})
         return
       } catch { /* fall through to OMDb */ }
     }
@@ -135,10 +141,16 @@ export default function VodScreen() {
       const trending: VodItem[] = []
       for (const tmdb of tmdbTrendingMovies) {
         const t = (extractBaseTitle(tmdb.title) || tmdb.title).toLowerCase()
+        const tYear = tmdb.releaseDate?.slice(0, 4)
         const match = vods.find((v) => {
           if (used.has(v.id)) return false
           const n = (extractBaseTitle(v.name) || v.name).toLowerCase()
-          return matchesTrendingTitle(n, t)
+          if (!matchesTrendingTitle(n, t)) return false
+          // Year guard: accept if either side has no year, or within ±1
+          if (tYear && v.year) {
+            if (Math.abs(parseInt(v.year) - parseInt(tYear)) > 1) return false
+          }
+          return true
         })
         if (match) {
           used.add(match.id)
@@ -157,7 +169,7 @@ export default function VodScreen() {
             backdrop: tmdb.backdropUrl,
             plot: tmdb.overview,
             rating: tmdb.voteAverage ? String(tmdb.voteAverage) : undefined,
-            year: tmdb.releaseDate?.slice(0, 4),
+            year: tYear,
             playlist_id: '',
             stream_id: undefined,
           } as VodItem)
@@ -194,12 +206,64 @@ export default function VodScreen() {
   }, [categoryFilter, byGenreWithTrending])
 
   const similar = useMemo(() => {
-    if (!selected || !selected.genre) return []
-    return vods
-      .filter((v) => v.id !== selected.id && v.genre === selected.genre)
-      .sort((a, b) => parseInt(b.year || '0') - parseInt(a.year || '0'))
-      .slice(0, 20)
-  }, [selected, vods])
+    if (!selected) return []
+
+    // ── Tier 1: TMDB curated similar/recommendations ─────────────────────────
+    if (similarTmdb.length > 0) {
+      const used = new Set<string>()
+      const rows: VodItem[] = []
+      for (const s of similarTmdb) {
+        const t = (extractBaseTitle(s.title) || s.title).toLowerCase()
+        const tYear = s.releaseDate?.slice(0, 4)
+        const match = vods.find((v) => {
+          if (used.has(v.id) || v.id === selected.id) return false
+          const n = (extractBaseTitle(v.name) || v.name).toLowerCase()
+          if (!matchesTrendingTitle(n, t)) return false
+          // Year guard: accept if either side has no year, or years are within ±1
+          if (tYear && v.year) {
+            if (Math.abs(parseInt(v.year) - parseInt(tYear)) > 1) return false
+          }
+          return true
+        })
+        if (match) {
+          used.add(match.id)
+          rows.push({
+            ...match,
+            poster: s.posterUrl || match.poster,
+            backdrop: s.backdropUrl || match.backdrop,
+            rating: s.voteAverage ? String(s.voteAverage) : match.rating,
+          })
+        } else {
+          // TMDB-only similar card (no local stream)
+          rows.push({
+            id: `tmdb-movie-${s.tmdbId}`,
+            name: s.title,
+            stream_url: '',
+            poster: s.posterUrl,
+            backdrop: s.backdropUrl,
+            plot: s.overview,
+            rating: s.voteAverage ? String(s.voteAverage) : undefined,
+            year: s.releaseDate?.slice(0, 4),
+            playlist_id: '',
+            stream_id: undefined,
+          } as VodItem)
+        }
+        if (rows.length >= 20) break
+      }
+      return rows
+    }
+
+    // ── Tier 2: mapGenre category fallback ───────────────────────────────────
+    const selCat = mapGenre(selected.genre) ?? mapGenre(selected.name)
+    if (selCat) {
+      return vods
+        .filter((v) => v.id !== selected.id && (mapGenre(v.genre) ?? mapGenre(v.name)) === selCat)
+        .sort((a, b) => parseInt(b.year || '0') - parseInt(a.year || '0'))
+        .slice(0, 20)
+    }
+
+    return []
+  }, [selected, similarTmdb, vods])
 
   // Switch to a different region version without losing the _versions list
   const switchVersion = async (regionItem: VodItem & { _region: string }) => {
@@ -245,8 +309,12 @@ export default function VodScreen() {
         )}
         <div className="detail-body">
           <button className="detail-back" onClick={() => {
-            setSelected(null); setTmdb(null); setOmdb(null)
-            requestAnimationFrame(() => { if (scrollRef.current) scrollRef.current.scrollTop = savedScroll.current })
+            if (routeState?.preSelectedItem || routeState?.preSelectedId) {
+              navigate(-1)
+            } else {
+              setSelected(null); setTmdb(null); setOmdb(null)
+              requestAnimationFrame(() => { if (scrollRef.current) scrollRef.current.scrollTop = savedScroll.current })
+            }
           }}>← Back</button>
           <div className="detail-hero">
             {displayPoster && (
@@ -287,18 +355,25 @@ export default function VodScreen() {
               )}
 
               <div className="detail-actions">
-                <button className="detail-pill-btn primary"
-                  onClick={() => navigate('/player', { state: { url: selected.stream_url, title: cleanTitle, live: false } })}>
-                  ▶ Play
-                </button>
+                {selected.stream_url ? (
+                  <button className="detail-pill-btn primary"
+                    onClick={() => navigate('/player', { state: { url: selected.stream_url, title: cleanTitle, live: false } })}>
+                    ▶ Play
+                  </button>
+                ) : (
+                  <button className="detail-pill-btn primary" disabled title="No local source — not in your playlist">
+                    ▶ Not Available
+                  </button>
+                )}
                 {tmdb?.trailerKey && (
                   <button className="detail-pill-btn trailer"
                     onClick={() => open(`https://www.youtube.com/watch?v=${tmdb.trailerKey}`).catch(() => {})}>
                     ▶ Trailer
                   </button>
                 )}
-                <button className={`detail-pill-btn ${fav ? 'fav-active' : ''}`} onClick={toggleFav}>
-                  {fav ? '★ In Favorites' : '☆ Add to Favorites'}
+                <button className={`detail-fav-btn ${fav ? 'fav-active' : ''}`} onClick={toggleFav}
+                  title={fav ? 'Remove from Favorites' : 'Add to Favorites'}>
+                  {fav ? '★' : '+'}
                 </button>
               </div>
             </div>
@@ -419,6 +494,7 @@ export default function VodScreen() {
                       <div className="vod-row-hover">▶</div>
                       {v.rating && <span className="vod-row-rating">★ {parseFloat(v.rating).toFixed(1)}</span>}
                       {versionCount > 1 && <span className="vod-row-versions">{versionCount} ver.</span>}
+                      {!v.stream_url && <span className="vod-row-tmdb-badge">TMDB</span>}
                     </div>
                     <p className="vod-row-name truncate">{title}</p>
                   </div>
