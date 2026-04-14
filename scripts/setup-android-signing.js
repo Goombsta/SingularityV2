@@ -50,7 +50,7 @@ if (missing.length > 0) {
 const gradlePropsPath = path.join(__dirname, '..', 'src-tauri', 'gen', 'android', 'gradle.properties');
 const gradleProps = `
 # Android signing configuration (auto-generated from .env)
-org.gradle.jvmargs=-Xmx2048m -XX:MaxPermSize=512m
+org.gradle.jvmargs=-Xmx2048m
 
 # Signing config
 KEYSTORE_PATH=${env.TAURI_ANDROID_KEYSTORE_PATH}

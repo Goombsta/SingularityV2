@@ -27,6 +27,23 @@ android {
             abiFilters += listOf("arm64-v8a", "x86_64")
         }
     }
+    signingConfigs {
+        create("release") {
+            val keystorePath = System.getenv("KEYSTORE_PATH") ?: findProperty("KEYSTORE_PATH") as? String
+            val keystorePassword = System.getenv("KEYSTORE_PASSWORD") ?: findProperty("KEYSTORE_PASSWORD") as? String
+            val keyAlias = System.getenv("KEY_ALIAS") ?: findProperty("KEY_ALIAS") as? String
+            val keyPassword = System.getenv("KEY_PASSWORD") ?: findProperty("KEY_PASSWORD") as? String
+
+            if (keystorePath != null && keystorePassword != null && keyAlias != null && keyPassword != null) {
+                storeFile = file(keystorePath)
+                storePassword = keystorePassword
+                this.keyAlias = keyAlias
+                this.keyPassword = keyPassword
+            } else {
+                throw GradleException("Signing credentials not found. Ensure .env file is set up and npm run setup-signing has been executed.")
+            }
+        }
+    }
     buildTypes {
         getByName("debug") {
             manifestPlaceholders["usesCleartextTraffic"] = "true"
@@ -46,6 +63,7 @@ android {
                     .plus(getDefaultProguardFile("proguard-android-optimize.txt"))
                     .toList().toTypedArray()
             )
+            signingConfig = signingConfigs.getByName("release")
         }
     }
     kotlinOptions {
