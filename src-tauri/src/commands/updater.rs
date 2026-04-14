@@ -1,11 +1,9 @@
-use std::env::temp_dir;
-
-/// Download an installer from `url` into the OS temp directory as `filename`.
+/// Download an installer from `url` into a writable directory as `filename`.
 /// Returns the absolute path of the saved file on success.
-/// On Android, temp_dir() resolves to the app's private cache dir which is
-/// accessible via the FileProvider already configured in AndroidManifest.xml.
+/// On Android, uses the app's private cache dir (temp_dir() = /tmp which is
+/// not writable on Android). On other platforms uses the OS temp directory.
 #[tauri::command]
-pub async fn download_update(url: String, filename: String) -> Result<String, String> {
+pub async fn download_update(app: tauri::AppHandle, url: String, filename: String) -> Result<String, String> {
     let client = reqwest::Client::builder()
         .user_agent("Singularity-Updater/1.0")
         .build()
@@ -26,8 +24,19 @@ pub async fn download_update(url: String, filename: String) -> Result<String, St
         .await
         .map_err(|e| format!("Download failed: {e}"))?;
 
-    let mut path = temp_dir();
-    path.push(&filename);
+    #[cfg(target_os = "android")]
+    let dir = {
+        use tauri::Manager;
+        app.path().app_cache_dir().map_err(|e| format!("Cache dir unavailable: {e}"))?
+    };
+    #[cfg(not(target_os = "android"))]
+    let dir = {
+        let _ = &app;
+        std::env::temp_dir()
+    };
+
+    std::fs::create_dir_all(&dir).map_err(|e| format!("Dir create failed: {e}"))?;
+    let path = dir.join(&filename);
 
     std::fs::write(&path, &bytes).map_err(|e| format!("Write failed: {e}"))?;
 
