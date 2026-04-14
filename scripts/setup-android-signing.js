@@ -51,6 +51,7 @@ const gradlePropsPath = path.join(__dirname, '..', 'src-tauri', 'gen', 'android'
 const gradleProps = `
 # Android signing configuration (auto-generated from .env)
 org.gradle.jvmargs=-Xmx2048m
+android.useAndroidX=true
 
 # Signing config
 KEYSTORE_PATH=${env.TAURI_ANDROID_KEYSTORE_PATH}

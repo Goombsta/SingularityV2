@@ -263,6 +263,13 @@ jobs:
           echo "--- Manifest after patch ---"
           cat "$MANIFEST"
 
+      - name: Write gradle.properties (AndroidX + JVM args)
+        run: |
+          cat > src-tauri/gen/android/gradle.properties << 'EOF'
+          org.gradle.jvmargs=-Xmx2048m
+          android.useAndroidX=true
+          EOF
+
       - name: Decode keystore
         run: |
           echo "${{ secrets.ANDROID_KEYSTORE }}" | base64 --decode > "$HOME/singularity.keystore"
