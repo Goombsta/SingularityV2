@@ -333,7 +333,8 @@ export default function PlayerScreen() {
 
       } catch (e) {
         if (!cancelled) {
-          setMpvError(String(e))
+          const msg = typeof e === 'string' ? e : (e as any)?.message ?? JSON.stringify(e)
+          setMpvError(msg)
           mpvActiveRef.current = false
           setPlayerMode('html5')
         }

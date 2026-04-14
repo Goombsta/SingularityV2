@@ -48,8 +48,9 @@ class MpvPlugin(private val activity: android.app.Activity) : Plugin(activity) {
     fun mpvCreate(invoke: Invoke) {
         val args = invoke.parseArgs(MpvCreateArgs::class.java)
         activity.runOnUiThread {
+            var surfaceView: SurfaceView? = null
             try {
-                val surfaceView = SurfaceView(activity)
+                surfaceView = SurfaceView(activity)
                 surfaceView.id = android.view.View.generateViewId()
 
                 // Always MATCH_PARENT — MPV handles aspect ratio internally.
@@ -73,7 +74,13 @@ class MpvPlugin(private val activity: android.app.Activity) : Plugin(activity) {
 
                 players[args.playerId] = ps
                 invoke.resolve()
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
+                // Remove the SurfaceView from the hierarchy if it was added before the failure,
+                // otherwise it leaks and occludes the WebView (grey screen visible through
+                // the transparent WebView background).
+                surfaceView?.let { sv ->
+                    (sv.parent as? ViewGroup)?.removeView(sv)
+                }
                 invoke.reject(e.message ?: "Failed to create MPV player")
             }
         }
