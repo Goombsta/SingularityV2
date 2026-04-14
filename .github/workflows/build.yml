@@ -42,14 +42,16 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           node -e "
             const fs = require('fs');
+            const v = process.env.VERSION;
             const pkg = JSON.parse(fs.readFileSync('package.json'));
-            pkg.version = process.env.VERSION;
+            pkg.version = v;
             fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+            // MSI bundler requires numeric-only MAJOR.MINOR.PATCH — strip pre-release suffix
             const conf = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json'));
-            conf.version = process.env.VERSION;
+            conf.version = v.replace(/-.*$/, '');
             fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(conf, null, 2) + '\n');
+            console.log('package.json:', v, ' tauri.conf.json:', conf.version);
           "
-          echo "Stamped version: $VERSION"
         env:
           VERSION: ${{ github.ref_name }}
 
@@ -146,14 +148,15 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           node -e "
             const fs = require('fs');
+            const v = process.env.VERSION;
             const pkg = JSON.parse(fs.readFileSync('package.json'));
-            pkg.version = process.env.VERSION;
+            pkg.version = v;
             fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
             const conf = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json'));
-            conf.version = process.env.VERSION;
+            conf.version = v.replace(/-.*$/, '');
             fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(conf, null, 2) + '\n');
+            console.log('package.json:', v, ' tauri.conf.json:', conf.version);
           "
-          echo "Stamped version: $VERSION"
         env:
           VERSION: ${{ github.ref_name }}
 
@@ -169,10 +172,13 @@ jobs:
       - name: Copy Kotlin plugin files into generated Android project
         run: |
           DEST="src-tauri/gen/android/app/src/main/java/com/singularity/app"
-          cp src-tauri/android-plugin/VlcPlugin.kt "$DEST/"
-          cp src-tauri/android-plugin/UpdaterPlugin.kt "$DEST/"
+          MPV_LIB_DEST="src-tauri/gen/android/app/src/main/java/is/xyz/mpv"
+          mkdir -p "$MPV_LIB_DEST"
+          cp src-tauri/android-plugin/MpvPlugin.kt "$DEST/"
+          cp src-tauri/android-plugin/MPVLib.kt "$MPV_LIB_DEST/"
           echo "Plugin files copied:"
           ls -la "$DEST/"
+          ls -la "$MPV_LIB_DEST/"
 
       - name: Write MainActivity (edge-to-edge only; plugins registered from Rust)
         run: |
@@ -220,14 +226,15 @@ jobs:
               app = app.replace(marker, marker + ndk_block)
               print("App Gradle patched — NDK abiFilters added")
 
-          # ── App: add libVLC dependency after first androidx.webkit line ──
-          vlc_dep = '\n    implementation("org.videolan.android:libvlc-all:3.6.0")'
-          webkit_marker = 'implementation("androidx.webkit:'
-          if webkit_marker in app and 'libvlc-all' not in app:
-              idx = app.index(webkit_marker)
-              end = app.index('\n', idx)
-              app = app[:end] + vlc_dep + app[end:]
-              print("App Gradle patched — libVLC dependency added")
+          # ── App: ensure useLegacyPackaging for jniLibs (required for vendored libmpv.so) ──
+          if 'useLegacyPackaging' not in app:
+              legacy_block = '\n    packaging {\n        jniLibs {\n            useLegacyPackaging = true\n        }\n    }'
+              kotlin_opts = 'kotlinOptions {'
+              if kotlin_opts in app:
+                  idx = app.index(kotlin_opts)
+                  end = app.index('}', idx) + 1
+                  app = app[:end] + legacy_block + app[end:]
+                  print("App Gradle patched — useLegacyPackaging added")
 
           open(APP, "w").write(app)
 
