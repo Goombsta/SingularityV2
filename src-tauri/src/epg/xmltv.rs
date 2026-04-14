@@ -1,15 +1,33 @@
 use super::EpgProgram;
 use anyhow::{Context, Result};
+use flate2::read::GzDecoder;
 use quick_xml::events::Event;
 use quick_xml::Reader;
+use std::io::Read;
 
 pub async fn fetch_and_parse(url: &str) -> Result<Vec<EpgProgram>> {
-    let content = reqwest::get(url)
+    let resp = reqwest::get(url)
         .await
-        .context("Failed to fetch EPG XML")?
-        .text()
-        .await
-        .context("Failed to read EPG response")?;
+        .context("Failed to fetch EPG XML")?;
+
+    let is_gzip = url.ends_with(".gz")
+        || resp
+            .headers()
+            .get("content-encoding")
+            .and_then(|v| v.to_str().ok())
+            .map(|v| v.contains("gzip"))
+            .unwrap_or(false);
+
+    let bytes = resp.bytes().await.context("Failed to read EPG response")?;
+
+    let content = if is_gzip {
+        let mut decoder = GzDecoder::new(&bytes[..]);
+        let mut s = String::new();
+        decoder.read_to_string(&mut s).context("Failed to decompress gzip EPG")?;
+        s
+    } else {
+        String::from_utf8(bytes.to_vec()).context("EPG response is not valid UTF-8")?
+    };
 
     parse_xmltv(&content)
 }

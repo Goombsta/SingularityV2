@@ -1,10 +1,26 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import Hls from 'hls.js'
 import mpegts from 'mpegts.js'
+import { invoke } from '@tauri-apps/api/core'
 import { usePlaylistStore } from '../store/slices/playlistSlice'
 import PlaylistPicker from '../components/common/PlaylistPicker'
 import type { Channel } from '../types'
 import './MultiviewScreen.css'
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function makeProxyLoader(proxyPort: number): any {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const Base: any = Hls.DefaultConfig.loader
+  return class extends Base {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    load(context: any, config: any, callbacks: any) {
+      if (context.url && !/^http:\/\/127\.0\.0\.1/.test(context.url)) {
+        context = { ...context, url: `http://127.0.0.1:${proxyPort}/proxy?url=${encodeURIComponent(context.url)}` }
+      }
+      super.load(context, config, callbacks)
+    }
+  }
+}
 
 type MultiviewLayout = '2H' | '2V' | '3' | '4'
 
@@ -92,6 +108,9 @@ export default function MultiviewScreen() {
   const reconnectTimers = useRef<(ReturnType<typeof setTimeout> | null)[]>([null, null, null, null])
   const stallTimers = useRef<(ReturnType<typeof setTimeout> | null)[]>([null, null, null, null])
   const loadedUrls = useRef<string[]>(['', '', '', ''])
+  // Track activeCell in a ref so event callbacks always see the current value
+  const activeCellRef = useRef(activeCell)
+  const proxyPortRef = useRef<number | null>(null)
 
   // Progress watchdog: if a playing cell makes no timeupdate progress for 20s, reconnect.
   // This catches HLS.js streams that freeze without surfacing HTML5 video events.
@@ -100,6 +119,22 @@ export default function MultiviewScreen() {
   const watchdogRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => { cellsRef.current = cells }, [cells])
+  useEffect(() => { activeCellRef.current = activeCell }, [activeCell])
+
+  // Imperatively sync muted state when active cell changes.
+  // React's muted prop is broken (React #6544) — it doesn't reflect to the DOM attribute,
+  // so we must set video.muted directly.
+  useEffect(() => {
+    videoRefs.current.forEach((video, id) => {
+      if (video) video.muted = id !== activeCell
+    })
+  }, [activeCell])
+
+  useEffect(() => {
+    invoke<number | null>('get_proxy_port')
+      .then(p => { proxyPortRef.current = p ?? null })
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (activePlaylistId) fetchChannels(activePlaylistId)
@@ -121,61 +156,85 @@ export default function MultiviewScreen() {
     return () => { if (watchdogRef.current) clearInterval(watchdogRef.current) }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── loadStream: imperatively loads a stream into a video element ──────────
-  function loadStream(cellId: number, url: string, video: HTMLVideoElement | null) {
-    if (!video || !url) return
+  // ── loadStream: mirrors Live TV's tryHls → tryMpegts → tryNative chain ─────
+  function loadStream(cellId: number, url: string, videoEl: HTMLVideoElement | null) {
+    if (!videoEl || !url) return
+    const video = videoEl   // narrowed to HTMLVideoElement — safe in closures
 
-    // Reset progress timer so the watchdog doesn't fire immediately on a fresh load
     lastProgressTime.current[cellId] = Date.now()
 
-    // Destroy previous instances
     hlsInstances.current[cellId]?.destroy()
     hlsInstances.current[cellId] = null
-    mpegtsInstances.current[cellId]?.destroy()
-    mpegtsInstances.current[cellId] = null
+    if (mpegtsInstances.current[cellId]) {
+      mpegtsInstances.current[cellId].unload?.()
+      mpegtsInstances.current[cellId].detachMediaElement?.()
+      mpegtsInstances.current[cellId].destroy()
+      mpegtsInstances.current[cellId] = null
+    }
     video.src = ''
 
-    const isHls = /\.m3u8(\?|$)/i.test(url)
-    const isTs = /\.ts(\?|$)/i.test(url)
+    const isExplicitHls = /\.m3u8(\?|$)/i.test(url)
+    const isExplicitTs  = /\.ts(\?|$)/i.test(url)
 
-    if (isHls && Hls.isSupported()) {
-      const hls = new Hls(HLS_CONFIG)
-      hls.loadSource(url)
-      hls.attachMedia(video)
-      hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}))
-      // Limit retries: hls.startLoad() in an infinite loop never shows the badge.
-      // After 3 network retries or 1 media recovery, hand off to triggerReconnect.
-      let networkRetries = 0
-      let mediaRecovered = false
-      hls.on(Hls.Events.ERROR, (_, data) => {
-        if (data.fatal) {
-          if (data.type === Hls.ErrorTypes.NETWORK_ERROR && networkRetries < 3) {
-            networkRetries++
-            hls.startLoad()
-          } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR && !mediaRecovered) {
-            mediaRecovered = true
-            hls.recoverMediaError()
-          } else {
-            triggerReconnect(cellId)
-          }
-        }
-      })
-      hlsInstances.current[cellId] = hls
-    } else if (isHls && video.canPlayType('application/vnd.apple.mpegurl')) {
+    // Start muted → play → unmute active cell once 'playing' fires (same as Live TV)
+    function mutedPlay() {
+      video.muted = true
+      Promise.resolve(video.play()).catch(() => {})
+      video.addEventListener('playing', () => {
+        video.muted = cellId !== activeCellRef.current
+      }, { once: true })
+    }
+
+    function tryNative() {
       video.src = url
-      video.play().catch(() => {})
-    } else if (isTs && mpegts.isSupported()) {
+      mutedPlay()
+    }
+
+    function tryMpegts() {
+      if (!mpegts.isSupported()) { tryNative(); return }
       const player = mpegts.createPlayer(
         { type: 'mpegts', url, isLive: true, hasAudio: true, hasVideo: true },
         MPEGTS_CONFIG
       )
+      mpegtsInstances.current[cellId] = player
       player.attachMediaElement(video)
       player.load()
-      player.play()
-      mpegtsInstances.current[cellId] = player
+      mutedPlay()
+      player.on(mpegts.Events.ERROR, () => {
+        player.unload?.(); player.detachMediaElement?.(); player.destroy()
+        mpegtsInstances.current[cellId] = null
+        tryNative()
+      })
+    }
+
+    async function tryHls(hlsUrl: string, onFail: () => void, useProxy?: boolean) {
+      if (!Hls.isSupported()) { onFail(); return }
+      let proxyPort = useProxy ? proxyPortRef.current : null
+      if (useProxy && proxyPort == null) {
+        try { proxyPort = await invoke<number | null>('get_proxy_port') ?? null
+              proxyPortRef.current = proxyPort }
+        catch { proxyPort = null }
+      }
+      const ProxyCls = proxyPort != null ? makeProxyLoader(proxyPort) : null
+      const hls = new Hls({
+        ...HLS_CONFIG,
+        ...(ProxyCls ? { loader: ProxyCls, fLoader: ProxyCls, pLoader: ProxyCls } : {}),
+      })
+      hlsInstances.current[cellId] = hls
+      hls.loadSource(hlsUrl)
+      hls.attachMedia(video)
+      hls.on(Hls.Events.MANIFEST_PARSED, () => mutedPlay())
+      hls.on(Hls.Events.ERROR, (_, data) => {
+        if (data.fatal) { hls.destroy(); hlsInstances.current[cellId] = null; onFail() }
+      })
+    }
+
+    if (isExplicitHls) {
+      tryHls(url, () => triggerReconnect(cellId), true)
+    } else if (isExplicitTs) {
+      tryHls(url.replace(/\.ts(\?|$)/i, '.m3u8$1'), () => tryMpegts())
     } else {
-      video.src = url
-      video.play().catch(() => {})
+      tryHls(url, () => tryMpegts())
     }
   }
 
@@ -534,7 +593,7 @@ export default function MultiviewScreen() {
                     className="mv-video"
                     autoPlay
                     playsInline
-                    muted={cell.id !== activeCell}
+                    muted
                     onEnded={() => handleEnded(cell.id)}
                     onStalled={() => handleStalled(cell.id)}
                     onWaiting={() => handleWaiting(cell.id)}

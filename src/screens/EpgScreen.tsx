@@ -2,11 +2,27 @@ import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import Hls from 'hls.js'
 import mpegts from 'mpegts.js'
 import { useNavigate } from 'react-router-dom'
+import { invoke } from '@tauri-apps/api/core'
 import { useEpgStore } from '../store/slices/epgSlice'
 import { usePlaylistStore } from '../store/slices/playlistSlice'
 import PlaylistPicker from '../components/common/PlaylistPicker'
 import type { Channel, EpgProgram } from '../types'
 import './EpgScreen.css'
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function makeProxyLoader(proxyPort: number): any {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const Base: any = Hls.DefaultConfig.loader
+  return class extends Base {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    load(context: any, config: any, callbacks: any) {
+      if (context.url && !/^http:\/\/127\.0\.0\.1/.test(context.url)) {
+        context = { ...context, url: `http://127.0.0.1:${proxyPort}/proxy?url=${encodeURIComponent(context.url)}` }
+      }
+      super.load(context, config, callbacks)
+    }
+  }
+}
 
 const WINDOW_MINUTES = 180
 const CELL_MINUTES = 30
@@ -160,7 +176,7 @@ const EpgGrid = React.memo(function EpgGrid({
 
       <div className="epg-body">
         <div className="epg-channel-col" style={{ width: CHANNEL_COL_WIDTH }}>
-          <div style={{ height: totalHeightPx, position: 'relative' }}>
+          <div style={{ height: totalHeightPx, position: 'relative', transform: `translateY(-${scrollTop}px)` }}>
             {visibleChannels.map((ch, i) => {
               const absIndex = visibleStart + i
               return (
@@ -250,50 +266,105 @@ function EpgPreviewPanel({ selection, onClose, onWatchFullscreen }: PreviewPanel
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
   const mpegtsRef = useRef<any>(null)
+  const proxyPortRef = useRef<number | null>(null)
+  const [isMuted, setIsMuted] = useState(true)
+
+  // Sync mute toggle to DOM (React muted prop is unreliable)
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.muted = isMuted
+  }, [isMuted])
+
+  // Fetch proxy port once — same as Live TV / PlayerScreen
+  useEffect(() => {
+    invoke<number | null>('get_proxy_port')
+      .then(p => { proxyPortRef.current = p ?? null })
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
-    const video = videoRef.current
+    if (!videoRef.current || !channel.stream_url) return
+    const video = videoRef.current   // narrowed to HTMLVideoElement — safe in closures
     const url = channel.stream_url
-    if (!video || !url) return
 
     hlsRef.current?.destroy(); hlsRef.current = null
-    mpegtsRef.current?.destroy(); mpegtsRef.current = null
+    if (mpegtsRef.current) {
+      mpegtsRef.current.unload?.()
+      mpegtsRef.current.detachMediaElement?.()
+      mpegtsRef.current.destroy()
+      mpegtsRef.current = null
+    }
     video.src = ''
 
-    const isHls = /\.m3u8(\?|$)/i.test(url)
+    const isExplicitHls = /\.m3u8(\?|$)/i.test(url)
+    const isExplicitTs  = /\.ts(\?|$)/i.test(url)
 
-    if (isHls && Hls.isSupported()) {
-      const hls = new Hls(HLS_CONFIG)
-      hls.loadSource(url)
-      hls.attachMedia(video)
-      hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}))
-      hls.on(Hls.Events.ERROR, (_, data) => {
-        if (data.fatal) {
-          if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad()
-          else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError()
-        }
-      })
-      hlsRef.current = hls
-    } else if (isHls && video.canPlayType('application/vnd.apple.mpegurl')) {
+    // Start muted so autoplay is always permitted; user unmutes via the toggle button
+    function mutedPlay() {
+      video.muted = true
+      setIsMuted(true)
+      Promise.resolve(video.play()).catch(() => {})
+    }
+
+    function tryNative() {
       video.src = url
-      video.play().catch(() => {})
-    } else if (mpegts.isSupported()) {
+      mutedPlay()
+    }
+
+    function tryMpegts() {
+      if (!mpegts.isSupported()) { tryNative(); return }
       const player = mpegts.createPlayer(
         { type: 'mpegts', url, isLive: true, hasAudio: true, hasVideo: true },
         MPEGTS_CONFIG
       )
+      mpegtsRef.current = player
       player.attachMediaElement(video)
       player.load()
-      player.play()
-      mpegtsRef.current = player
+      mutedPlay()
+      player.on(mpegts.Events.ERROR, () => {
+        player.unload?.(); player.detachMediaElement?.(); player.destroy()
+        mpegtsRef.current = null
+        tryNative()
+      })
+    }
+
+    async function tryHls(hlsUrl: string, onFail: () => void, useProxy?: boolean) {
+      if (!Hls.isSupported()) { onFail(); return }
+      let proxyPort = useProxy ? proxyPortRef.current : null
+      if (useProxy && proxyPort == null) {
+        try { proxyPort = await invoke<number | null>('get_proxy_port') ?? null
+              proxyPortRef.current = proxyPort }
+        catch { proxyPort = null }
+      }
+      const ProxyCls = proxyPort != null ? makeProxyLoader(proxyPort) : null
+      const hls = new Hls({
+        ...HLS_CONFIG,
+        ...(ProxyCls ? { loader: ProxyCls, fLoader: ProxyCls, pLoader: ProxyCls } : {}),
+      })
+      hlsRef.current = hls
+      hls.loadSource(hlsUrl)
+      hls.attachMedia(video)
+      hls.on(Hls.Events.MANIFEST_PARSED, () => mutedPlay())
+      hls.on(Hls.Events.ERROR, (_, data) => {
+        if (data.fatal) { hls.destroy(); hlsRef.current = null; onFail() }
+      })
+    }
+
+    if (isExplicitHls) {
+      tryHls(url, tryNative, true)
+    } else if (isExplicitTs) {
+      tryHls(url.replace(/\.ts(\?|$)/i, '.m3u8$1'), () => tryMpegts())
     } else {
-      video.src = url
-      video.play().catch(() => {})
+      tryHls(url, () => tryMpegts())
     }
 
     return () => {
       hlsRef.current?.destroy(); hlsRef.current = null
-      mpegtsRef.current?.destroy(); mpegtsRef.current = null
+      if (mpegtsRef.current) {
+        mpegtsRef.current.unload?.()
+        mpegtsRef.current.detachMediaElement?.()
+        mpegtsRef.current.destroy()
+        mpegtsRef.current = null
+      }
     }
   }, [channel.stream_url])
 
@@ -309,9 +380,16 @@ function EpgPreviewPanel({ selection, onClose, onWatchFullscreen }: PreviewPanel
           className="epg-preview-video"
           autoPlay
           playsInline
-          muted={false}
+          muted
         />
         <button className="epg-preview-panel-close" onClick={onClose} title="Close">✕</button>
+        <button
+          className="epg-preview-mute-toggle"
+          onClick={() => setIsMuted((m) => !m)}
+          title={isMuted ? 'Unmute' : 'Mute'}
+        >
+          {isMuted ? '🔇' : '🔊'}
+        </button>
       </div>
 
       {/* Program info */}

@@ -243,21 +243,25 @@ class MpvPlugin(private val activity: android.app.Activity) : Plugin(activity) {
 
     // ── Arg classes ────────────────────────────────────────────────────────
 
-    data class MpvCreateArgs(
-        val playerId: String = "",
-        val x: Int = 0, val y: Int = 0,
-        val width: Int = 0, val height: Int = 0,
-        val live: Boolean = false,
-    )
-    data class MpvIdArgs(val playerId: String = "")
-    data class MpvUrlArgs(val playerId: String = "", val url: String = "")
-    data class MpvVolumeArgs(val playerId: String = "", val volume: Int = 100)
-    data class MpvSeekArgs(val playerId: String = "", val position: Double = 0.0)
-    data class MpvResizeArgs(
-        val playerId: String = "",
-        val x: Int = 0, val y: Int = 0,
-        val width: Int = 0, val height: Int = 0,
-    )
-    data class MpvTrackArgs(val playerId: String = "", val trackId: Int = -1)
-    data class MpvSubScaleArgs(val playerId: String = "", val scale: Double = 1.0)
+    class MpvCreateArgs {
+        var playerId: String = ""
+        var x: Int = 0
+        var y: Int = 0
+        var width: Int = 0
+        var height: Int = 0
+        var live: Boolean = false
+    }
+    class MpvIdArgs { var playerId: String = "" }
+    class MpvUrlArgs { var playerId: String = ""; var url: String = "" }
+    class MpvVolumeArgs { var playerId: String = ""; var volume: Int = 100 }
+    class MpvSeekArgs { var playerId: String = ""; var position: Double = 0.0 }
+    class MpvResizeArgs {
+        var playerId: String = ""
+        var x: Int = 0
+        var y: Int = 0
+        var width: Int = 0
+        var height: Int = 0
+    }
+    class MpvTrackArgs { var playerId: String = ""; var trackId: Int = -1 }
+    class MpvSubScaleArgs { var playerId: String = ""; var scale: Double = 1.0 }
 }

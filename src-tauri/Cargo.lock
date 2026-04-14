@@ -3499,6 +3499,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
+ "flate2",
  "keyring",
  "libmpv-sys",
  "quick-xml 0.36.2",
