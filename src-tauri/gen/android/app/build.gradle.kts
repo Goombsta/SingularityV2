@@ -51,6 +51,11 @@ android {
     kotlinOptions {
         jvmTarget = "1.8"
     }
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
     buildFeatures {
         buildConfig = true
     }
@@ -62,8 +67,7 @@ rust {
 
 dependencies {
     implementation("androidx.webkit:webkit:1.14.0")
-    // libVLC — full codec support (TrueHD, DTS, H.265, MKV, etc.) on Maven Central
-    implementation("org.videolan.android:libvlc-all:3.6.0")
+    // MPV native libraries are vendored in jniLibs/ (extracted from mpv-android 2026-03-22 release)
     implementation("androidx.appcompat:appcompat:1.7.1")
     implementation("androidx.activity:activity-ktx:1.10.1")
     implementation("com.google.android.material:material:1.12.0")

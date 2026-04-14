@@ -357,7 +357,7 @@ export default function VodScreen() {
               <div className="detail-actions">
                 {selected.stream_url ? (
                   <button className="detail-pill-btn primary"
-                    onClick={() => navigate('/player', { state: { url: selected.stream_url, title: cleanTitle, live: false } })}>
+                    onClick={() => navigate('/player', { state: { url: selected.stream_url, title: cleanTitle, live: false, resumeKey: `playlist:${selected.playlist_id}:vod:${selected.id}` } })}>
                     ▶ Play
                   </button>
                 ) : (

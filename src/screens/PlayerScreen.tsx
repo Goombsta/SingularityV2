@@ -4,7 +4,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { platform } from '@tauri-apps/plugin-os'
 import Hls from 'hls.js'
 import mpegts from 'mpegts.js'
-import type { PlayerState } from '../types'
+import type { PlayerState, ResumeEntry } from '../types'
 import './PlayerScreen.css'
 
 // 'pending' = still determining which player to use (MPV initialising on Windows)
@@ -12,8 +12,9 @@ import './PlayerScreen.css'
 // 'html5'   = HTML5 <video> fallback (Android, or MPV failed)
 type PlayerMode = 'pending' | 'mpv' | 'html5'
 
-// Proxy loader for HLS.js — rewrites fragment URLs through the local Rust proxy
-// so CDNs never see browser Origin/Referer headers. Only used for explicit .m3u8 URLs.
+// Proxy loader for HLS.js — rewrites ALL requests (manifest + segments + keys) through
+// the local Rust proxy so CDNs never see browser Origin/Referer headers and CORS is
+// bypassed entirely. Only used for explicit .m3u8 URLs.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function makeProxyLoader(proxyPort: number): any {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -48,10 +49,13 @@ function getPlatform(): string {
 function isWindowsPlatform(): boolean { return getPlatform() === 'windows' }
 function isAndroidPlatform(): boolean { return getPlatform() === 'android' }
 
-// Route player commands to the Kotlin VlcPlugin on Android, Rust on Windows.
-// VlcPlugin implements the same command names as the Rust MPV bridge.
+// Android native player plugin namespace. Swap 'vlc' → 'mpv' once MPV codec gates pass.
+const ANDROID_PLAYER_PLUGIN = 'mpv'
+
+// Route player commands to the Kotlin MpvPlugin on Android, Rust on Windows.
+// MpvPlugin implements the same command names as the Rust MPV bridge.
 function playerCmd<T = void>(cmd: string, args: Record<string, unknown> = {}): Promise<T> {
-  if (isAndroidPlatform()) return invoke<T>(`plugin:vlc|${cmd}`, args)
+  if (isAndroidPlatform()) return invoke<T>(`plugin:${ANDROID_PLAYER_PLUGIN}|${cmd}`, args)
   return invoke<T>(cmd, args)
 }
 
@@ -75,6 +79,12 @@ export default function PlayerScreen() {
   const stallTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Resume playback refs
+  const resumeDecisionRef = useRef<((seekTo: number | null) => void) | null>(null)
+  const resumeSaveTickRef = useRef(0)   // counts 1s poll ticks; save every 5
+  const positionRef = useRef(0)         // mirrors position state for stable callbacks
+  const durationRef = useRef(0)         // mirrors duration state for stable callbacks
+
   const [playerMode, setPlayerMode] = useState<PlayerMode>('pending')
   const [videoReady, setVideoReady] = useState(false)
   const [showControls, setShowControls] = useState(true)
@@ -90,6 +100,10 @@ export default function PlayerScreen() {
   const [reconnecting, setReconnecting] = useState(false)
   const [reconnectKey, setReconnectKey] = useState(0)
   const [unsupportedAudioCodec, setUnsupportedAudioCodec] = useState<string | null>(null)
+
+  // Resume prompt
+  const [showResumePrompt, setShowResumePrompt] = useState(false)
+  const [pendingResumeEntry, setPendingResumeEntry] = useState<ResumeEntry | null>(null)
 
   // Tracks
   const [subtitleTracks, setSubtitleTracks] = useState<TrackInfo[]>([])
@@ -216,7 +230,33 @@ export default function PlayerScreen() {
         setVideoReady(false)
         setPlayerMode('mpv')
 
+        // ── Resume check — show modal before loading, block until user chooses ─
+        let seekTo: number | null = null
+        if (state?.resumeKey && state.live !== true) {
+          try {
+            const entry = await invoke<ResumeEntry | null>('get_resume_position', { key: state.resumeKey })
+            if (!cancelled && entry && entry.position_sec > 30) {
+              setPendingResumeEntry(entry)
+              setShowResumePrompt(true)
+              seekTo = await new Promise<number | null>(resolve => { resumeDecisionRef.current = resolve })
+              resumeDecisionRef.current = null
+              setShowResumePrompt(false)
+              setPendingResumeEntry(null)
+            }
+          } catch { /* ignore — treat as no saved position */ }
+        }
+
+        if (cancelled) { playerCmd('mpv_destroy', { playerId }).catch(() => {}); return }
+
         await playerCmd('mpv_load_url', { playerId, url: state!.url })
+
+        // Seek to saved position after mpv initialises
+        if (seekTo !== null && seekTo > 0) {
+          setTimeout(() => {
+            if (!cancelled) playerCmd('mpv_seek', { playerId, position: seekTo! }).catch(() => {})
+          }, 800)
+        }
+
         setPaused(false)
         setStreamError(false)
         tracksLoadedRef.current = false
@@ -235,8 +275,18 @@ export default function PlayerScreen() {
             )
             pollCount++
             setPosition(props.position)
-            if (props.duration > 0) setDuration(props.duration)
+            positionRef.current = props.position
+            if (props.duration > 0) { setDuration(props.duration); durationRef.current = props.duration }
             setPaused(props.paused)
+
+            // Throttled resume save: every 5 poll ticks (≈5 s)
+            if (!props.paused && state?.resumeKey && state.live !== true) {
+              resumeSaveTickRef.current++
+              if (resumeSaveTickRef.current >= 5) {
+                resumeSaveTickRef.current = 0
+                saveResume()
+              }
+            }
             // Only go transparent once video is actually rendering (avoids desktop bleed-through)
             if (!videoReady && (props.position > 0 || (props.duration > 0 && !props.idle))) {
               setVideoReady(true)
@@ -284,6 +334,15 @@ export default function PlayerScreen() {
 
     return () => {
       cancelled = true
+      // Dismiss any pending resume modal so the Promise resolves and the async
+      // start() function can unblock and proceed to its own cancelled check.
+      if (resumeDecisionRef.current) {
+        resumeDecisionRef.current(null)
+        resumeDecisionRef.current = null
+      }
+      setShowResumePrompt(false)
+      setPendingResumeEntry(null)
+      saveResume()
       setStreamError(false)
       setVideoReady(false)
       if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
@@ -413,7 +472,7 @@ export default function PlayerScreen() {
         backBufferLength: isLive ? 30 : 90,
         maxBufferLength: isLive ? 30 : 60,
         maxMaxBufferLength: isLive ? 60 : 120,
-        ...(proxyPort != null ? { fLoader: makeProxyLoader(proxyPort) } : {}),
+        ...(proxyPort != null ? { loader: makeProxyLoader(proxyPort) } : {}),
       })
       hlsRef.current = hls
       hls.loadSource(sourceUrl ?? url)
@@ -433,7 +492,7 @@ export default function PlayerScreen() {
     }
 
     if (isHls && Hls.isSupported()) {
-      startHls(undefined, undefined, true)  // proxy segment requests for explicit .m3u8
+      startHls(undefined, undefined, true)  // proxy all requests (manifest + segments) for explicit .m3u8
     } else if (isHls && video.canPlayType('application/vnd.apple.mpegurl')) {
       // Native HLS (Safari/iOS)
       video.src = url
@@ -510,12 +569,13 @@ export default function PlayerScreen() {
       } else {
         playerCmd('mpv_pause', { playerId: playerIdRef.current }).catch(() => {})
         setPaused(true)
+        saveResume()
       }
     } else {
       const v = videoRef.current
       if (!v) return
       if (v.paused) { v.play().catch(() => {}); setPaused(false) }
-      else { v.pause(); setPaused(true) }
+      else { v.pause(); setPaused(true); saveResume() }
     }
     resetControlsTimer()
   }
@@ -604,6 +664,29 @@ export default function PlayerScreen() {
 
   const trackLabel = (t: TrackInfo) => t.title ?? t.lang ?? `Track ${t.id}`
 
+  // Save or auto-clear the resume position for the current on-demand item.
+  // Safe to call from any closure — reads via refs, not state.
+  const saveResume = () => {
+    const key = state?.resumeKey
+    if (!key || state?.live === true) return
+    const pos = positionRef.current
+    const dur = durationRef.current
+    if (pos <= 30 || dur <= 0) return
+    // Auto-clear when near completion: 90% through AND <120 s left, OR <30 s left
+    if ((pos >= 0.9 * dur && (dur - pos) < 120) || (dur - pos) < 30) {
+      invoke('clear_resume_position', { key }).catch(() => {})
+      return
+    }
+    invoke('save_resume_position', {
+      entry: {
+        key, position_sec: pos, duration_sec: dur,
+        title: state?.title ?? '', poster_url: null,
+        stream_url: state?.url ?? '',
+        updated_at: Math.floor(Date.now() / 1000),
+      },
+    }).catch(() => {})
+  }
+
   const handleBack = () => {
     if (fading) return
     setFading(true)
@@ -631,10 +714,10 @@ export default function PlayerScreen() {
           playsInline
           disablePictureInPicture
           onContextMenu={(e) => e.preventDefault()}
-          onTimeUpdate={(e) => { setPosition(e.currentTarget.currentTime); clearStallTimer() }}
-          onDurationChange={(e) => setDuration(e.currentTarget.duration)}
+          onTimeUpdate={(e) => { const t = e.currentTarget.currentTime; setPosition(t); positionRef.current = t; clearStallTimer() }}
+          onDurationChange={(e) => { const d = e.currentTarget.duration; setDuration(d); durationRef.current = d }}
           onPlay={() => setPaused(false)}
-          onPause={() => setPaused(true)}
+          onPause={() => { setPaused(true); saveResume() }}
           onPlaying={() => { clearStallTimer(); setReconnecting(false) }}
           onEnded={() => { if (state?.live !== false) triggerReconnect() }}
           onStalled={() => { if (state?.live !== false) { clearStallTimer(); stallTimerRef.current = setTimeout(triggerReconnect, 10000) } }}
@@ -675,6 +758,36 @@ export default function PlayerScreen() {
           >
             Retry
           </button>
+        </div>
+      )}
+
+      {/* Resume prompt — blocks until user chooses Resume or Start Over */}
+      {showResumePrompt && pendingResumeEntry && (
+        <div className="resume-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="resume-modal-box">
+            <div className="resume-modal-title">Continue watching?</div>
+            <div className="resume-modal-sub">
+              Stopped at {formatTime(pendingResumeEntry.position_sec)}
+              {pendingResumeEntry.duration_sec > 0 && ` of ${formatTime(pendingResumeEntry.duration_sec)}`}
+            </div>
+            <div className="resume-modal-actions">
+              <button
+                className="resume-btn resume-btn-primary"
+                onClick={() => resumeDecisionRef.current?.(pendingResumeEntry.position_sec)}
+              >
+                Resume
+              </button>
+              <button
+                className="resume-btn resume-btn-secondary"
+                onClick={() => {
+                  if (state?.resumeKey) invoke('clear_resume_position', { key: state.resumeKey }).catch(() => {})
+                  resumeDecisionRef.current?.(null)
+                }}
+              >
+                Start Over
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

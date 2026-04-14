@@ -102,4 +102,15 @@ export interface PlayerState {
   channelId?: string
   playlistId?: string
   returnTo?: string   // route to navigate to on back (e.g. '/epg')
+  resumeKey?: string  // stable content identity key; undefined for live TV
+}
+
+export interface ResumeEntry {
+  key: string
+  position_sec: number
+  duration_sec: number
+  title: string
+  poster_url: string | null
+  stream_url: string
+  updated_at: number  // unix seconds
 }

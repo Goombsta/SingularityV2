@@ -11,6 +11,7 @@ fn get_proxy_port() -> Option<u16> {
 }
 
 use commands::favorites::FavoritesStore;
+use commands::resume::ResumeStore;
 use epg::{EpgCache, EpgSource};
 use playlist::{Playlist, PlaylistStore};
 use tauri::Manager;
@@ -23,11 +24,12 @@ pub fn run() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_os::init())
-        .plugin(android_plugins::init_vlc())
+        .plugin(android_plugins::init_mpv())
         .plugin(android_plugins::init_updater())
         .manage(PlaylistStore::new())
         .manage(EpgCache::new())
-        .manage(FavoritesStore::new());
+        .manage(FavoritesStore::new())
+        .manage(ResumeStore::new());
 
     // Native MPV store — desktop only (Android uses the Kotlin MpvPlugin)
     #[cfg(not(target_os = "android"))]
@@ -48,6 +50,11 @@ pub fn run() {
             let favorites: Vec<commands::favorites::FavoriteItem> =
                 persist::load(handle, "favorites.json");
             *app.state::<FavoritesStore>().items.lock().unwrap() = favorites;
+
+            // ── Restore persisted resume positions ────────────────────────────
+            let resume_entries: std::collections::HashMap<String, commands::resume::ResumeEntry> =
+                persist::load(handle, "resume.json");
+            *app.state::<ResumeStore>().entries.lock().unwrap() = resume_entries;
 
             // ── Restore persisted EPG sources ─────────────────────────────────
             let epg_sources: Vec<EpgSource> = persist::load(handle, "epg_sources.json");
@@ -82,6 +89,11 @@ pub fn run() {
             commands::favorites::add_to_favorites,
             commands::favorites::remove_from_favorites,
             commands::favorites::get_favorites,
+            // Resume positions
+            commands::resume::get_resume_position,
+            commands::resume::save_resume_position,
+            commands::resume::clear_resume_position,
+            commands::resume::list_resume_entries,
             // HLS proxy port
             get_proxy_port,
             // OMDb metadata

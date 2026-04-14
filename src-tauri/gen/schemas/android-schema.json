@@ -2355,6 +2355,168 @@
           "markdownDescription": "Denies the unminimize command without any pre-configured scope."
         },
         {
+          "description": "Default plugin permissions.\n#### This default permission set includes:\n\n- `allow-mpv-create`\n- `allow-mpv-load-url`\n- `allow-mpv-pause`\n- `allow-mpv-resume`\n- `allow-mpv-set-volume`\n- `allow-mpv-seek`\n- `allow-mpv-resize`\n- `allow-mpv-destroy`\n- `allow-player-get-properties`\n- `allow-mpv-get-tracks`\n- `allow-mpv-set-audio-track`\n- `allow-mpv-set-sub-track`\n- `allow-mpv-set-sub-scale`",
+          "type": "string",
+          "const": "mpv:default",
+          "markdownDescription": "Default plugin permissions.\n#### This default permission set includes:\n\n- `allow-mpv-create`\n- `allow-mpv-load-url`\n- `allow-mpv-pause`\n- `allow-mpv-resume`\n- `allow-mpv-set-volume`\n- `allow-mpv-seek`\n- `allow-mpv-resize`\n- `allow-mpv-destroy`\n- `allow-player-get-properties`\n- `allow-mpv-get-tracks`\n- `allow-mpv-set-audio-track`\n- `allow-mpv-set-sub-track`\n- `allow-mpv-set-sub-scale`"
+        },
+        {
+          "description": "Enables the mpv_create command without any pre-configured scope.",
+          "type": "string",
+          "const": "mpv:allow-mpv-create",
+          "markdownDescription": "Enables the mpv_create command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the mpv_destroy command without any pre-configured scope.",
+          "type": "string",
+          "const": "mpv:allow-mpv-destroy",
+          "markdownDescription": "Enables the mpv_destroy command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the mpv_get_tracks command without any pre-configured scope.",
+          "type": "string",
+          "const": "mpv:allow-mpv-get-tracks",
+          "markdownDescription": "Enables the mpv_get_tracks command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the mpv_load_url command without any pre-configured scope.",
+          "type": "string",
+          "const": "mpv:allow-mpv-load-url",
+          "markdownDescription": "Enables the mpv_load_url command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the mpv_pause command without any pre-configured scope.",
+          "type": "string",
+          "const": "mpv:allow-mpv-pause",
+          "markdownDescription": "Enables the mpv_pause command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the mpv_resize command without any pre-configured scope.",
+          "type": "string",
+          "const": "mpv:allow-mpv-resize",
+          "markdownDescription": "Enables the mpv_resize command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the mpv_resume command without any pre-configured scope.",
+          "type": "string",
+          "const": "mpv:allow-mpv-resume",
+          "markdownDescription": "Enables the mpv_resume command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the mpv_seek command without any pre-configured scope.",
+          "type": "string",
+          "const": "mpv:allow-mpv-seek",
+          "markdownDescription": "Enables the mpv_seek command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the mpv_set_audio_track command without any pre-configured scope.",
+          "type": "string",
+          "const": "mpv:allow-mpv-set-audio-track",
+          "markdownDescription": "Enables the mpv_set_audio_track command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the mpv_set_sub_scale command without any pre-configured scope.",
+          "type": "string",
+          "const": "mpv:allow-mpv-set-sub-scale",
+          "markdownDescription": "Enables the mpv_set_sub_scale command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the mpv_set_sub_track command without any pre-configured scope.",
+          "type": "string",
+          "const": "mpv:allow-mpv-set-sub-track",
+          "markdownDescription": "Enables the mpv_set_sub_track command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the mpv_set_volume command without any pre-configured scope.",
+          "type": "string",
+          "const": "mpv:allow-mpv-set-volume",
+          "markdownDescription": "Enables the mpv_set_volume command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the player_get_properties command without any pre-configured scope.",
+          "type": "string",
+          "const": "mpv:allow-player-get-properties",
+          "markdownDescription": "Enables the player_get_properties command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the mpv_create command without any pre-configured scope.",
+          "type": "string",
+          "const": "mpv:deny-mpv-create",
+          "markdownDescription": "Denies the mpv_create command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the mpv_destroy command without any pre-configured scope.",
+          "type": "string",
+          "const": "mpv:deny-mpv-destroy",
+          "markdownDescription": "Denies the mpv_destroy command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the mpv_get_tracks command without any pre-configured scope.",
+          "type": "string",
+          "const": "mpv:deny-mpv-get-tracks",
+          "markdownDescription": "Denies the mpv_get_tracks command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the mpv_load_url command without any pre-configured scope.",
+          "type": "string",
+          "const": "mpv:deny-mpv-load-url",
+          "markdownDescription": "Denies the mpv_load_url command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the mpv_pause command without any pre-configured scope.",
+          "type": "string",
+          "const": "mpv:deny-mpv-pause",
+          "markdownDescription": "Denies the mpv_pause command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the mpv_resize command without any pre-configured scope.",
+          "type": "string",
+          "const": "mpv:deny-mpv-resize",
+          "markdownDescription": "Denies the mpv_resize command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the mpv_resume command without any pre-configured scope.",
+          "type": "string",
+          "const": "mpv:deny-mpv-resume",
+          "markdownDescription": "Denies the mpv_resume command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the mpv_seek command without any pre-configured scope.",
+          "type": "string",
+          "const": "mpv:deny-mpv-seek",
+          "markdownDescription": "Denies the mpv_seek command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the mpv_set_audio_track command without any pre-configured scope.",
+          "type": "string",
+          "const": "mpv:deny-mpv-set-audio-track",
+          "markdownDescription": "Denies the mpv_set_audio_track command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the mpv_set_sub_scale command without any pre-configured scope.",
+          "type": "string",
+          "const": "mpv:deny-mpv-set-sub-scale",
+          "markdownDescription": "Denies the mpv_set_sub_scale command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the mpv_set_sub_track command without any pre-configured scope.",
+          "type": "string",
+          "const": "mpv:deny-mpv-set-sub-track",
+          "markdownDescription": "Denies the mpv_set_sub_track command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the mpv_set_volume command without any pre-configured scope.",
+          "type": "string",
+          "const": "mpv:deny-mpv-set-volume",
+          "markdownDescription": "Denies the mpv_set_volume command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the player_get_properties command without any pre-configured scope.",
+          "type": "string",
+          "const": "mpv:deny-player-get-properties",
+          "markdownDescription": "Denies the player_get_properties command without any pre-configured scope."
+        },
+        {
           "description": "This permission set configures which\noperating system information are available\nto gather from the frontend.\n\n#### Granted Permissions\n\nAll information except the host name are available.\n\n\n#### This default permission set includes:\n\n- `allow-arch`\n- `allow-exe-extension`\n- `allow-family`\n- `allow-locale`\n- `allow-os-type`\n- `allow-platform`\n- `allow-version`",
           "type": "string",
           "const": "os:default",

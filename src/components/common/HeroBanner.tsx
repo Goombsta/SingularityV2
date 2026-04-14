@@ -89,7 +89,7 @@ export default function HeroBanner({ items, onSelect }: HeroBannerProps) {
   }
   const handlePlay = () => {
     const url = isVod ? (item as VodItem).stream_url : ''
-    if (url) navigate('/player', { state: { url, title: cleanTitle, live: false } })
+    if (url) navigate('/player', { state: { url, title: cleanTitle, live: false, resumeKey: `playlist:${item.playlist_id}:vod:${item.id}` } })
     else handleDetails() // no stream available — fall back to details view
   }
 

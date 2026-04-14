@@ -88,7 +88,7 @@ export default function MainLayout() {
       {!splashGone && (
         <div className={`splash-overlay${splashFading ? ' fading' : ''}`}>
           <div className="splash-logo-wrap">
-            <span className="splash-eyebrow">Now Entering the</span>
+            <span className="splash-eyebrow">Now Entering</span>
             <div className="splash-logo">SINGULARITY DEUX</div>
           </div>
           <div className="splash-spinner" />

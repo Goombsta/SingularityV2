@@ -557,3 +557,69 @@
 .ts-orange { color: #f97316; }
 .ts-green  { color: #22c55e; }
 .ts-red    { color: #ef4444; }
+
+/* ── Resume prompt modal ─────────────────────────────────────────────────── */
+.resume-modal {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.65);
+  z-index: 80;
+}
+
+.resume-modal-box {
+  background: rgba(18, 14, 35, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 28px 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 280px;
+  max-width: 380px;
+}
+
+.resume-modal-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: #fff;
+  letter-spacing: 0.01em;
+}
+
+.resume-modal-sub {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.55);
+  margin-bottom: 6px;
+  text-align: center;
+}
+
+.resume-modal-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.resume-btn {
+  padding: 9px 22px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.resume-btn:hover { opacity: 0.85; }
+
+.resume-btn-primary {
+  background: #7c3aed;
+  color: #fff;
+}
+
+.resume-btn-secondary {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}

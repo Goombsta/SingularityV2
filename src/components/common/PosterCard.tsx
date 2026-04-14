@@ -42,14 +42,26 @@ export default function PosterCard({
     }
     // Channels play immediately; VOD/series should use onSelect from parent
     const url = 'stream_url' in item ? item.stream_url : ''
-    navigate('/player', { state: { url, title: item.name, playlistId: item.playlist_id } })
+    const isLive = itemType === 'channel'
+    navigate('/player', {
+      state: {
+        url, title: item.name, playlistId: item.playlist_id, live: isLive,
+        resumeKey: itemType === 'vod' ? `playlist:${item.playlist_id}:vod:${item.id}` : undefined,
+      },
+    })
   }
 
   const handlePlayClick = (e: React.MouseEvent) => {
     e.stopPropagation()
     if (onPlay) { onPlay(); return }
     const url = 'stream_url' in item ? item.stream_url : ''
-    navigate('/player', { state: { url, title: item.name, playlistId: item.playlist_id } })
+    const isLive = itemType === 'channel'
+    navigate('/player', {
+      state: {
+        url, title: item.name, playlistId: item.playlist_id, live: isLive,
+        resumeKey: itemType === 'vod' ? `playlist:${item.playlist_id}:vod:${item.id}` : undefined,
+      },
+    })
   }
 
   const toggleFav = (e: React.MouseEvent) => {

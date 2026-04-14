@@ -194,7 +194,12 @@ export default function SeriesScreen() {
 
   const playEpisode = (ep: Episode) => {
     navigate('/player', {
-      state: { url: ep.stream_url, title: `${selected?.series.name} S${ep.season}E${ep.episode_num}`, live: false },
+      state: {
+        url: ep.stream_url,
+        title: `${selected?.series.name} S${ep.season}E${ep.episode_num}`,
+        live: false,
+        resumeKey: `playlist:${selected?.series.playlist_id}:series:${selected?.series.id}:episode:${ep.id}`,
+      },
     })
   }
 
