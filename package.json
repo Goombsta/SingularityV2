@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "setup-signing": "node scripts/setup-android-signing.js",
+    "tauri:android:build": "npm run setup-signing && tauri android build",
+    "tauri:android:dev": "npm run setup-signing && tauri android dev"
   },
   "dependencies": {
     "@tanstack/react-query": "^5",

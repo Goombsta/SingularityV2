@@ -44,7 +44,11 @@
       "resources/libmpv-2.dll": "libmpv-2.dll"
     },
     "android": {
-      "minSdkVersion": 24
+      "minSdkVersion": 24,
+      "signingKeyAlias": "",
+      "signingKeyPassword": "",
+      "signingKeyPath": "",
+      "signingStorePassword": ""
     }
   }
 }
