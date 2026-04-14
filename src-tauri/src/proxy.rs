@@ -19,11 +19,6 @@ pub async fn start() {
     let _ = PROXY_PORT.set(port);
 
     let client = reqwest::Client::builder()
-        .user_agent(
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) \
-             AppleWebKit/537.36 (KHTML, like Gecko) \
-             Chrome/120.0.0.0 Safari/537.36",
-        )
         .build()
         .expect("HLS proxy: reqwest client failed");
 
@@ -73,16 +68,50 @@ async fn handle(mut stream: TcpStream, client: reqwest::Client) {
 
     let target = urlencoding::decode(encoded).unwrap_or_default().into_owned();
 
-    match client.get(&target).send().await {
+    // Forward select headers from the browser request (User-Agent, Accept, Accept-Language).
+    // Strip Origin, Referer, Host, Cookie — those expose the browser's identity to the CDN.
+    let mut req_builder = client.get(&target);
+    for line in req.lines().skip(1) {
+        if line.is_empty() { break; }
+        if let Some(pos) = line.find(':') {
+            let name = line[..pos].trim().to_lowercase();
+            let value = line[pos + 1..].trim();
+            match name.as_str() {
+                "user-agent" | "accept" | "accept-language" | "accept-encoding" => {
+                    req_builder = req_builder.header(&name, value);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    match req_builder.send().await {
         Ok(resp) => {
             let status = resp.status().as_u16();
+            let final_url = resp.url().clone();
             let ct = resp
                 .headers()
                 .get("content-type")
                 .and_then(|v| v.to_str().ok())
                 .unwrap_or("application/octet-stream")
                 .to_owned();
-            let body = resp.bytes().await.unwrap_or_default();
+            let raw = resp.bytes().await.unwrap_or_default();
+
+            // If the response is an HLS playlist, rewrite every URL line so segments,
+            // variants, and keys all come back through this proxy. Without this,
+            // HLS.js may bypass our JS loader and fetch segments directly.
+            let is_m3u8 = ct.contains("mpegurl")
+                || ct.contains("m3u8")
+                || target.to_lowercase().contains(".m3u8");
+            let body: Vec<u8> = if is_m3u8 {
+                match std::str::from_utf8(&raw) {
+                    Ok(text) => rewrite_m3u8(text, &final_url).into_bytes(),
+                    Err(_) => raw.to_vec(),
+                }
+            } else {
+                raw.to_vec()
+            };
+
             let header = format!(
                 "HTTP/1.1 {status} OK\r\n\
                  Access-Control-Allow-Origin: *\r\n\
@@ -107,4 +136,55 @@ async fn handle(mut stream: TcpStream, client: reqwest::Client) {
             let _ = stream.write_all(msg.as_bytes()).await;
         }
     }
+}
+
+/// Rewrite every URL in an HLS manifest to route through this proxy.
+/// Handles:
+///   - Absolute URLs on non-comment lines (segments, variant playlists)
+///   - Relative URLs on non-comment lines (resolved against `base`)
+///   - URI="..." attributes inside #EXT-X-KEY, #EXT-X-MAP, #EXT-X-MEDIA, etc.
+fn rewrite_m3u8(text: &str, base: &reqwest::Url) -> String {
+    let port = port().unwrap_or(0);
+    let wrap = |u: &str| -> String {
+        // Resolve relative URLs against the manifest's final (post-redirect) URL.
+        let absolute = match base.join(u) {
+            Ok(v) => v.to_string(),
+            Err(_) => u.to_string(),
+        };
+        format!(
+            "http://127.0.0.1:{port}/proxy?url={}",
+            urlencoding::encode(&absolute)
+        )
+    };
+
+    let mut out = String::with_capacity(text.len() + 256);
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            out.push('\n');
+            continue;
+        }
+        if trimmed.starts_with('#') {
+            // Rewrite any URI="..." attribute inside the tag.
+            if let Some(start) = line.find("URI=\"") {
+                let after = start + 5;
+                if let Some(end_rel) = line[after..].find('"') {
+                    let end = after + end_rel;
+                    let uri = &line[after..end];
+                    let replaced = wrap(uri);
+                    out.push_str(&line[..after]);
+                    out.push_str(&replaced);
+                    out.push_str(&line[end..]);
+                    out.push('\n');
+                    continue;
+                }
+            }
+            out.push_str(line);
+            out.push('\n');
+        } else {
+            out.push_str(&wrap(trimmed));
+            out.push('\n');
+        }
+    }
+    out
 }

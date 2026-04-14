@@ -9,6 +9,16 @@ const FAVORITES = '__favorites__'
 // Proxy loader for HLS.js — rewrites fragment URLs through the local Rust proxy
 // so CDNs never see browser Origin/Referer headers. Only used for explicit .m3u8 URLs.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+// Chromium/WebView2 rejects 'mp4a.40.1' (AAC Main Profile) via MSE addSourceBuffer,
+// but virtually all IPTV servers that declare it actually send AAC-LC (mp4a.40.2) frames.
+// Remap at the MediaSource level so HLS.js never tries the unsupported codec string.
+if (typeof MediaSource !== 'undefined') {
+  const _orig = MediaSource.prototype.addSourceBuffer
+  MediaSource.prototype.addSourceBuffer = function (mime: string) {
+    return _orig.call(this, mime.replace('mp4a.40.1', 'mp4a.40.2'))
+  }
+}
+
 function makeProxyLoader(proxyPort: number): any {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const Base: any = Hls.DefaultConfig.loader
@@ -260,9 +270,16 @@ export default function LiveTvScreen() {
       })
     }
 
-    function tryHls(hlsUrl: string, onFail: () => void, useProxy?: boolean) {
+    async function tryHls(hlsUrl: string, onFail: () => void, useProxy?: boolean) {
       if (!Hls.isSupported()) { onFail(); return }
-      const proxyPort = useProxy ? proxyPortRef.current : null
+      let proxyPort = useProxy ? proxyPortRef.current : null
+      if (useProxy && proxyPort == null) {
+        try {
+          proxyPort = await invoke<number | null>('get_proxy_port') ?? null
+          proxyPortRef.current = proxyPort
+        } catch { proxyPort = null }
+      }
+      const ProxyCls = proxyPort != null ? makeProxyLoader(proxyPort) : null
       const hls = new Hls({
         enableWorker: true,
         lowLatencyMode: false,
@@ -275,7 +292,7 @@ export default function LiveTvScreen() {
         fragLoadingTimeOut: 10000,
         manifestLoadingTimeOut: 5000,
         levelLoadingTimeOut: 5000,
-        ...(proxyPort != null ? { fLoader: makeProxyLoader(proxyPort) } : {}),
+        ...(ProxyCls ? { loader: ProxyCls, fLoader: ProxyCls, pLoader: ProxyCls } : {}),
       })
       hlsRef.current = hls
       hls.loadSource(hlsUrl)
@@ -290,8 +307,10 @@ export default function LiveTvScreen() {
     }
 
     if (isExplicitHls) {
-      // Explicit .m3u8 — HLS.js with proxy to bypass CDN origin checks, fall back to native
-      tryHls(url, () => tryNative(), true)
+      // Explicit .m3u8 — HLS.js only. Never fall back to native <video> for m3u8, because
+      // WebView2/Edge has added native HLS support and will fetch segments directly with
+      // browser Origin/Referer — IPTV CDNs reject those with 404.
+      tryHls(url, () => { /* fatal — let user retry */ }, true)
     } else if (isExplicitTs) {
       // Explicit .ts — try HLS first with .m3u8 variant (works on Android WebView + Desktop),
       // fall back to mpegts.js, then native

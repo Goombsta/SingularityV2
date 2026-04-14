@@ -16,6 +16,16 @@ type PlayerMode = 'pending' | 'mpv' | 'html5'
 // the local Rust proxy so CDNs never see browser Origin/Referer headers and CORS is
 // bypassed entirely. Only used for explicit .m3u8 URLs.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+// Chromium/WebView2 rejects 'mp4a.40.1' (AAC Main Profile) via MSE addSourceBuffer,
+// but virtually all IPTV servers that declare it actually send AAC-LC (mp4a.40.2) frames.
+// Remap at the MediaSource level so HLS.js never tries the unsupported codec string.
+if (typeof MediaSource !== 'undefined') {
+  const _orig = MediaSource.prototype.addSourceBuffer
+  MediaSource.prototype.addSourceBuffer = function (mime: string) {
+    return _orig.call(this, mime.replace('mp4a.40.1', 'mp4a.40.2'))
+  }
+}
+
 function makeProxyLoader(proxyPort: number): any {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const Base: any = Hls.DefaultConfig.loader
@@ -393,6 +403,7 @@ export default function PlayerScreen() {
     if (playerMode !== 'html5' || !state?.url || !videoRef.current) return
     const video = videoRef.current
     const url = state.url
+    let cancelled = false
 
     hlsRef.current?.destroy(); hlsRef.current = null
     if (mpegtsRef.current) {
@@ -464,15 +475,23 @@ export default function PlayerScreen() {
       })
     }
 
-    function startHls(onFatalFallback?: () => void, sourceUrl?: string, useProxy?: boolean) {
-      const proxyPort = useProxy ? proxyPortRef.current : null
+    async function startHls(onFatalFallback?: () => void, sourceUrl?: string, useProxy?: boolean) {
+      let proxyPort = useProxy ? proxyPortRef.current : null
+      if (useProxy && proxyPort == null) {
+        try {
+          proxyPort = await invoke<number | null>('get_proxy_port') ?? null
+          proxyPortRef.current = proxyPort
+        } catch { proxyPort = null }
+      }
+      if (cancelled) return
+      const ProxyCls = proxyPort != null ? makeProxyLoader(proxyPort) : null
       const hls = new Hls({
         enableWorker: true,
         lowLatencyMode: false,
         backBufferLength: isLive ? 30 : 90,
         maxBufferLength: isLive ? 30 : 60,
         maxMaxBufferLength: isLive ? 60 : 120,
-        ...(proxyPort != null ? { loader: makeProxyLoader(proxyPort) } : {}),
+        ...(ProxyCls ? { loader: ProxyCls, fLoader: ProxyCls, pLoader: ProxyCls } : {}),
       })
       hlsRef.current = hls
       hls.loadSource(sourceUrl ?? url)
@@ -491,12 +510,17 @@ export default function PlayerScreen() {
       })
     }
 
-    if (isHls && Hls.isSupported()) {
-      startHls(undefined, undefined, true)  // proxy all requests (manifest + segments) for explicit .m3u8
-    } else if (isHls && video.canPlayType('application/vnd.apple.mpegurl')) {
-      // Native HLS (Safari/iOS)
-      video.src = url
-      video.play().catch(() => {})
+    if (isHls) {
+      // Always use HLS.js — never native browser HLS. Edge/WebView2 has added native
+      // HLS support, but that fetches segments directly with the browser's Origin/Referer
+      // which IPTV CDNs reject (404). HLS.js routes all requests through our local proxy.
+      if (Hls.isSupported()) {
+        startHls(undefined, undefined, true)
+      } else {
+        // Last-resort: try native. Will likely 404 on IPTV CDNs but lets us fail gracefully.
+        video.src = url
+        video.play().catch(() => {})
+      }
     } else if (isNativeFormat) {
       startNative()
     } else if (isAndroidFallbackContainer) {
@@ -525,6 +549,7 @@ export default function PlayerScreen() {
 
     setUnsupportedAudioCodec(null)
     return () => {
+      cancelled = true
       hlsRef.current?.destroy(); hlsRef.current = null
       if (mpegtsRef.current) {
         mpegtsRef.current.unload()
