@@ -480,11 +480,10 @@ function AboutSettings() {
   const [downloadedPath, setDownloadedPath] = useState<string | null>(null)
   const [downloadError, setDownloadError] = useState<string | null>(null)
   const [progress, setProgress] = useState<{ downloaded: number; total: number | null }>({ downloaded: 0, total: null })
-  const [isAndroid, setIsAndroid] = useState(false)
+  const [isAndroid] = useState(() => { try { return platform() === 'android' } catch { return false } })
 
   useEffect(() => {
     getVersion().then(setVersion).catch(() => setVersion(null))
-    platform().then((p) => setIsAndroid(p === 'android')).catch(() => {})
   }, [])
 
   useEffect(() => {
