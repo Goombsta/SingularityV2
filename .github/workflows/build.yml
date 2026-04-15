@@ -284,7 +284,7 @@ jobs:
           echo "KEYSTORE_PATH=$HOME/singularity.keystore" >> $GITHUB_ENV
 
       - name: Build Tauri Android (APK, release)
-        run: npm run tauri android build -- --apk --release
+        run: npm run tauri android build -- --apk
         env:
           NDK_HOME: ${{ env.NDK_HOME }}
 
