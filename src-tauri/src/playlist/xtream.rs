@@ -29,7 +29,8 @@ impl XtreamClient {
             username: username.to_string(),
             password: password.to_string(),
             client: reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(30))
+                .connect_timeout(std::time::Duration::from_secs(15))
+                .timeout(std::time::Duration::from_secs(120))
                 .build()
                 .unwrap(),
         }
@@ -127,14 +128,19 @@ impl XtreamClient {
         // Fetch category names in parallel with streams
         let (streams_res, cats) = tokio::join!(
             async {
-                self.client
+                let bytes = self.client
                     .get(self.api_url("get_live_streams"))
                     .send()
                     .await
                     .context("Failed to fetch live streams")?
-                    .json::<Vec<XtreamStream>>()
+                    .bytes()
                     .await
-                    .context("Failed to parse live streams")
+                    .context("Failed to read live streams response")?;
+                serde_json::from_slice::<Vec<XtreamStream>>(&bytes)
+                    .map_err(|e| {
+                        let preview = String::from_utf8_lossy(&bytes[..bytes.len().min(500)]);
+                        anyhow::anyhow!("Failed to parse live streams: {} | Response: {}", e, preview)
+                    })
             },
             self.get_live_categories()
         );
