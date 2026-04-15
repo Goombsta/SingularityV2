@@ -283,38 +283,29 @@ jobs:
           echo "${{ secrets.ANDROID_KEYSTORE }}" | base64 --decode > "$HOME/singularity.keystore"
           echo "KEYSTORE_PATH=$HOME/singularity.keystore" >> $GITHUB_ENV
 
+      - name: Patch Gradle — inject release signingConfig
+        env:
+          KEYSTORE_PATH: ${{ env.KEYSTORE_PATH }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: python3 scripts/patch_signing.py src-tauri/gen/android/app/build.gradle.kts
+
       - name: Build Tauri Android (APK, release)
         run: npm run tauri android build -- --apk
         env:
           NDK_HOME: ${{ env.NDK_HOME }}
 
-      - name: Sign and align APK
+      - name: Collect and verify APK
         run: |
-          # Find the unsigned release APK
           APK=$(find src-tauri/gen/android/app/build/outputs/apk/universal/release \
                      src-tauri/gen/android/app/build/outputs/apk/release \
                      src-tauri/gen/android/app/build/outputs/apk \
-                     -name "*.apk" 2>/dev/null | head -1)
+                     -name "*.apk" 2>/dev/null | grep -v unsigned | head -1)
           echo "Found APK: $APK"
-
-          # Locate build tools
+          cp "$APK" /tmp/SingularityV2.apk
           BUILD_TOOLS=$(ls -d $ANDROID_SDK_ROOT/build-tools/* | sort -V | tail -1)
-          echo "Build tools: $BUILD_TOOLS"
-
-          # zipalign
-          $BUILD_TOOLS/zipalign -v -p 4 "$APK" /tmp/aligned.apk
-
-          # apksigner with release keystore
-          $BUILD_TOOLS/apksigner sign \
-            --ks "$KEYSTORE_PATH" \
-            --ks-pass "pass:${{ secrets.ANDROID_STORE_PASSWORD }}" \
-            --ks-key-alias "${{ secrets.ANDROID_KEY_ALIAS }}" \
-            --key-pass "pass:${{ secrets.ANDROID_KEY_PASSWORD }}" \
-            --out /tmp/SingularityV2.apk \
-            /tmp/aligned.apk
-
-          echo "Signed APK: /tmp/SingularityV2.apk"
-          $BUILD_TOOLS/apksigner verify /tmp/SingularityV2.apk && echo "Verification OK"
+          $BUILD_TOOLS/apksigner verify --verbose /tmp/SingularityV2.apk && echo "Verification OK"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
