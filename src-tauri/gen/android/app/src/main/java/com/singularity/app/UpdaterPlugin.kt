@@ -17,11 +17,16 @@ class UpdaterPlugin(private val activity: android.app.Activity) : Plugin(activit
 
     @Command
     fun installApk(invoke: Invoke) {
-        val args = invoke.parseArgs(InstallArgs::class.java)
-        val file = File(args.path)
+        val path = invoke.getArgs().getString("path")
+
+        if (path.isEmpty()) {
+            invoke.reject("Missing path argument")
+            return
+        }
+        val file = File(path)
 
         if (!file.exists()) {
-            invoke.reject("APK not found at: ${args.path}")
+            invoke.reject("APK not found at: $path")
             return
         }
 
@@ -62,6 +67,4 @@ class UpdaterPlugin(private val activity: android.app.Activity) : Plugin(activit
             }
         }
     }
-
-    data class InstallArgs(val path: String = "")
 }

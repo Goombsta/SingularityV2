@@ -17,19 +17,23 @@ class UpdaterPlugin(private val activity: android.app.Activity) : Plugin(activit
 
     @Command
     fun installApk(invoke: Invoke) {
-        val args = invoke.parseArgs(InstallArgs::class.java)
-        val file = File(args.path)
+        val path = invoke.getArgs().getString("path")
+
+        if (path.isEmpty()) {
+            invoke.reject("Missing path argument")
+            return
+        }
+        val file = File(path)
 
         if (!file.exists()) {
-            invoke.reject("APK not found at: ${args.path}")
+            invoke.reject("APK not found at: $path")
             return
         }
 
         activity.runOnUiThread {
             try {
                 // On Android 8+ check whether the app is allowed to install unknown packages.
-                // If not, redirect to the system settings screen. The user can tap Install
-                // after granting — no need to keep the app in a special state.
+                // If not, redirect to the system settings screen.
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     if (!activity.packageManager.canRequestPackageInstalls()) {
                         val settingsIntent = Intent(
@@ -65,6 +69,4 @@ class UpdaterPlugin(private val activity: android.app.Activity) : Plugin(activit
             }
         }
     }
-
-    data class InstallArgs(val path: String = "")
 }
