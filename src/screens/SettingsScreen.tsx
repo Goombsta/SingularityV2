@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { getVersion } from '@tauri-apps/api/app'
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { platform } from '@tauri-apps/plugin-os'
 import { usePlaylistStore } from '../store/slices/playlistSlice'
 import { useEpgStore } from '../store/slices/epgSlice'
@@ -453,7 +454,14 @@ function IntegrationsSettings() {
   )
 }
 
-type UpdateState = 'idle' | 'checking' | 'up-to-date' | 'update-available' | 'downloading' | 'downloaded' | 'download-error' | 'error'
+type UpdateState = 'idle' | 'checking' | 'up-to-date' | 'update-available' | 'downloading' | 'downloaded' | 'download-error' | 'install-permission' | 'error'
+
+function formatProgress(p: { downloaded: number; total: number | null }): string {
+  const mb = (n: number) => (n / (1024 * 1024)).toFixed(1)
+  if (p.total) return `${mb(p.downloaded)} / ${mb(p.total)} MB`
+  if (p.downloaded > 0) return `${mb(p.downloaded)} MB`
+  return ''
+}
 
 function compareVersions(a: string, b: string): number {
   const pa = a.split('.').map(Number)
@@ -470,6 +478,8 @@ function AboutSettings() {
   const [updateState, setUpdateState] = useState<UpdateState>('idle')
   const [latestVersion, setLatestVersion] = useState<string | null>(null)
   const [downloadedPath, setDownloadedPath] = useState<string | null>(null)
+  const [downloadError, setDownloadError] = useState<string | null>(null)
+  const [progress, setProgress] = useState<{ downloaded: number; total: number | null }>({ downloaded: 0, total: null })
   const currentPlatform = (() => { try { return platform() } catch { return 'windows' } })()
   const isAndroid = currentPlatform === 'android'
 
@@ -477,9 +487,18 @@ function AboutSettings() {
     getVersion().then(setVersion).catch(() => setVersion(null))
   }, [])
 
+  useEffect(() => {
+    let unlisten: UnlistenFn | undefined
+    listen<{ downloaded: number; total: number | null }>('update-download-progress', (ev) => {
+      setProgress({ downloaded: ev.payload.downloaded, total: ev.payload.total ?? null })
+    }).then((fn) => { unlisten = fn })
+    return () => { unlisten?.() }
+  }, [])
+
   const checkForUpdates = async () => {
     if (!version || updateState === 'checking') return
     setUpdateState('checking')
+    setDownloadError(null)
     try {
       const res = await fetch('https://api.github.com/repos/Goombsta/SingularityV2/releases/latest')
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -502,6 +521,8 @@ function AboutSettings() {
   const downloadUpdate = async () => {
     if (updateState === 'downloading') return
     setUpdateState('downloading')
+    setDownloadError(null)
+    setProgress({ downloaded: 0, total: null })
     try {
       const path = await invoke<string>('download_update', {
         url: downloadUrl,
@@ -509,20 +530,27 @@ function AboutSettings() {
       })
       setDownloadedPath(path)
       setUpdateState('downloaded')
-    } catch {
+    } catch (e) {
+      setDownloadError(String(e))
       setUpdateState('download-error')
     }
   }
 
   const installUpdate = async () => {
     if (!downloadedPath) return
+    setDownloadError(null)
     try {
       if (isAndroid) {
-        await invoke('plugin:updater|install_apk', { path: downloadedPath })
+        const res = await invoke<{ needsPermission?: boolean } | null>('plugin:updater|install_apk', { path: downloadedPath })
+        if (res?.needsPermission) {
+          setUpdateState('install-permission')
+          return
+        }
       } else {
         await invoke('install_update', { path: downloadedPath })
       }
-    } catch {
+    } catch (e) {
+      setDownloadError(String(e))
       setUpdateState('download-error')
     }
   }
@@ -555,16 +583,30 @@ function AboutSettings() {
           {updateState === 'error' && (
             <p className="about-status fail">Could not reach update server</p>
           )}
-          {(updateState === 'update-available' || updateState === 'downloading' || updateState === 'downloaded' || updateState === 'download-error') && latestVersion && (
+          {(updateState === 'update-available' || updateState === 'downloading' || updateState === 'downloaded' || updateState === 'download-error' || updateState === 'install-permission') && latestVersion && (
             <div className="about-update-available">
               <p className="about-status update">v{latestVersion} is available</p>
               {updateState === 'downloading' ? (
-                <button className="about-download-btn checking" disabled>
-                  <span className="about-spinner" />Downloading…
-                </button>
-              ) : updateState === 'downloaded' ? (
+                <>
+                  <button className="about-download-btn checking" disabled>
+                    <span className="about-spinner" />Downloading… {formatProgress(progress)}
+                  </button>
+                  {progress.total ? (
+                    <div className="about-progress-track">
+                      <div
+                        className="about-progress-fill"
+                        style={{ width: `${Math.min(100, (progress.downloaded / progress.total) * 100).toFixed(1)}%` }}
+                      />
+                    </div>
+                  ) : null}
+                </>
+              ) : updateState === 'downloaded' || updateState === 'install-permission' ? (
                 <button className="about-download-btn" onClick={installUpdate}>
                   Install Update
+                </button>
+              ) : updateState === 'download-error' ? (
+                <button className="about-download-btn" onClick={downloadUpdate}>
+                  Retry Download
                 </button>
               ) : (
                 <button className="about-download-btn" onClick={downloadUpdate}>
@@ -572,7 +614,10 @@ function AboutSettings() {
                 </button>
               )}
               {updateState === 'download-error' && (
-                <p className="about-status fail">Download failed — try again</p>
+                <p className="about-status fail">Download failed{downloadError ? `: ${downloadError}` : ''}</p>
+              )}
+              {updateState === 'install-permission' && (
+                <p className="about-status update">Grant "Install unknown apps" permission in Settings, then tap Install Update again.</p>
               )}
             </div>
           )}

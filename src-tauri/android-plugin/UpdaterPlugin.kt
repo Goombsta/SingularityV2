@@ -8,6 +8,7 @@ import androidx.core.content.FileProvider
 import app.tauri.annotation.Command
 import app.tauri.annotation.TauriPlugin
 import app.tauri.plugin.Invoke
+import app.tauri.plugin.JSObject
 import app.tauri.plugin.Plugin
 import java.io.File
 
@@ -36,8 +37,9 @@ class UpdaterPlugin(private val activity: android.app.Activity) : Plugin(activit
                             Uri.parse("package:${activity.packageName}")
                         ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         activity.startActivity(settingsIntent)
-                        // Resolve here — the UI will let the user retry install after granting.
-                        invoke.resolve()
+                        val result = JSObject()
+                        result.put("needsPermission", true)
+                        invoke.resolve(result)
                         return@runOnUiThread
                     }
                 }
@@ -55,7 +57,9 @@ class UpdaterPlugin(private val activity: android.app.Activity) : Plugin(activit
                 }
 
                 activity.startActivity(intent)
-                invoke.resolve()
+                val result = JSObject()
+                result.put("needsPermission", false)
+                invoke.resolve(result)
             } catch (e: Exception) {
                 invoke.reject(e.message ?: "Failed to launch installer")
             }

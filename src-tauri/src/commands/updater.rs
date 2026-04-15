@@ -1,33 +1,72 @@
+use futures_util::StreamExt;
+use serde::Serialize;
+use tauri::Emitter;
+#[cfg(target_os = "android")]
+use tauri::Manager;
+use tokio::io::AsyncWriteExt;
+
+#[derive(Clone, Serialize)]
+struct DownloadProgress {
+    downloaded: u64,
+    total: Option<u64>,
+}
+
+macro_rules! ulog {
+    ($($arg:tt)*) => { eprintln!("[updater] {}", format!($($arg)*)) };
+}
+
 /// Download an installer from `url` into a writable directory as `filename`.
-/// Returns the absolute path of the saved file on success.
-/// On Android, uses the app's private cache dir (temp_dir() = /tmp which is
-/// not writable on Android). On other platforms uses the OS temp directory.
+/// Streams the response to disk to avoid buffering ~80 MB in memory (which can
+/// OOM-kill the WebView on low-RAM Android devices). Emits
+/// `update-download-progress` events so the UI can show real progress.
+///
+/// On Android, writes to the app's private cache dir (the APK must live at the
+/// root of `getCacheDir()` for the current `file_paths.xml` FileProvider
+/// config). On other platforms uses the OS temp directory.
 #[tauri::command]
-pub async fn download_update(app: tauri::AppHandle, url: String, filename: String) -> Result<String, String> {
+pub async fn download_update(
+    app: tauri::AppHandle,
+    url: String,
+    filename: String,
+) -> Result<String, String> {
+    ulog!("download_update called: url={url} filename={filename}");
+
     let client = reqwest::Client::builder()
         .user_agent("Singularity-Updater/1.0")
+        .connect_timeout(std::time::Duration::from_secs(30))
+        .timeout(std::time::Duration::from_secs(600))
         .build()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| {
+            let s = e.to_string();
+            ulog!("client build failed: {s}");
+            s
+        })?;
 
-    let response = client
-        .get(&url)
-        .send()
-        .await
-        .map_err(|e| format!("Request failed: {e}"))?;
+    let response = client.get(&url).send().await.map_err(|e| {
+        let s = format!("Request failed: {e}");
+        ulog!("{s}");
+        s
+    })?;
 
-    if !response.status().is_success() {
-        return Err(format!("HTTP {}", response.status()));
+    let status = response.status();
+    ulog!("HTTP response: {status}");
+    if !status.is_success() {
+        let s = format!("HTTP {status}");
+        ulog!("{s}");
+        return Err(s);
     }
 
-    let bytes = response
-        .bytes()
-        .await
-        .map_err(|e| format!("Download failed: {e}"))?;
+    let total = response.content_length();
+    ulog!("content-length: {:?}", total);
 
     #[cfg(target_os = "android")]
     let dir = {
-        use tauri::Manager;
-        app.path().app_cache_dir().map_err(|e| format!("Cache dir unavailable: {e}"))?
+        let _ = &app;
+        app.path().app_cache_dir().map_err(|e| {
+            let s = format!("Cache dir unavailable: {e}");
+            ulog!("{s}");
+            s
+        })?
     };
     #[cfg(not(target_os = "android"))]
     let dir = {
@@ -35,11 +74,73 @@ pub async fn download_update(app: tauri::AppHandle, url: String, filename: Strin
         std::env::temp_dir()
     };
 
-    std::fs::create_dir_all(&dir).map_err(|e| format!("Dir create failed: {e}"))?;
+    ulog!("saving to dir: {}", dir.display());
+    std::fs::create_dir_all(&dir).map_err(|e| {
+        let s = format!("Dir create failed: {e}");
+        ulog!("{s}");
+        s
+    })?;
     let path = dir.join(&filename);
 
-    std::fs::write(&path, &bytes).map_err(|e| format!("Write failed: {e}"))?;
+    if path.exists() {
+        if let Err(e) = std::fs::remove_file(&path) {
+            ulog!("could not remove stale file: {e}");
+        }
+    }
 
+    let mut file = tokio::fs::File::create(&path).await.map_err(|e| {
+        let s = format!("File create failed: {e}");
+        ulog!("{s}");
+        s
+    })?;
+
+    let mut stream = response.bytes_stream();
+    let mut downloaded: u64 = 0;
+    let mut last_emit: u64 = 0;
+
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| {
+            let s = format!("Chunk read failed: {e}");
+            ulog!("{s}");
+            s
+        })?;
+        file.write_all(&chunk).await.map_err(|e| {
+            let s = format!("Write failed: {e}");
+            ulog!("{s}");
+            s
+        })?;
+        downloaded += chunk.len() as u64;
+
+        if downloaded - last_emit >= 256 * 1024 {
+            last_emit = downloaded;
+            let _ = app.emit(
+                "update-download-progress",
+                DownloadProgress { downloaded, total },
+            );
+        }
+    }
+
+    file.flush().await.map_err(|e| {
+        let s = format!("Flush failed: {e}");
+        ulog!("{s}");
+        s
+    })?;
+    drop(file);
+
+    let _ = app.emit(
+        "update-download-progress",
+        DownloadProgress { downloaded, total },
+    );
+
+    if let Some(expected) = total {
+        if downloaded != expected {
+            let s = format!("Size mismatch: got {downloaded}, expected {expected}");
+            ulog!("{s}");
+            return Err(s);
+        }
+    }
+
+    ulog!("saved {downloaded} bytes to: {}", path.display());
     Ok(path.to_string_lossy().to_string())
 }
 
