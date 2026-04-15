@@ -236,6 +236,14 @@ jobs:
                   app = app[:end] + legacy_block + app[end:]
                   print("App Gradle patched — useLegacyPackaging added")
 
+          # ── App: mark release build as non-debuggable (prevents Play Protect warning) ──
+          if 'isDebuggable = false' not in app and 'getByName("release")' in app:
+              app = app.replace(
+                  'getByName("release") {',
+                  'getByName("release") {\n            isDebuggable = false'
+              )
+              print("App Gradle patched — isDebuggable=false added to release build type")
+
           open(APP, "w").write(app)
 
           print("\n--- Root build.gradle.kts ---")
@@ -275,15 +283,18 @@ jobs:
           echo "${{ secrets.ANDROID_KEYSTORE }}" | base64 --decode > "$HOME/singularity.keystore"
           echo "KEYSTORE_PATH=$HOME/singularity.keystore" >> $GITHUB_ENV
 
-      - name: Build Tauri Android (APK, debug)
-        run: npm run tauri android build -- --apk
+      - name: Build Tauri Android (APK, release)
+        run: npm run tauri android build -- --apk --release
         env:
           NDK_HOME: ${{ env.NDK_HOME }}
 
       - name: Sign and align APK
         run: |
-          # Find the unsigned APK
-          APK=$(find src-tauri/gen/android/app/build/outputs/apk -name "*.apk" | head -1)
+          # Find the unsigned release APK
+          APK=$(find src-tauri/gen/android/app/build/outputs/apk/universal/release \
+                     src-tauri/gen/android/app/build/outputs/apk/release \
+                     src-tauri/gen/android/app/build/outputs/apk \
+                     -name "*.apk" 2>/dev/null | head -1)
           echo "Found APK: $APK"
 
           # Locate build tools
