@@ -11,6 +11,7 @@
     "core:window:allow-start-dragging",
     "shell:allow-open",
     "os:allow-platform",
-    "mpv:default"
+    "mpv:default",
+    "updater:default"
   ]
 }
