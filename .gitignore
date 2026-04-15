@@ -18,7 +18,7 @@ src-tauri/gen/android/.gradle/
 src-tauri/gen/android/app/build/
 src-tauri/gen/android/buildSrc/.gradle/
 src-tauri/gen/android/buildSrc/build/
-src-tauri/gen/android/gradle/
+src-tauri/gen/android/gradle/wrapper/dists/
 src-tauri/gen/android/gradlew
 src-tauri/gen/android/gradlew.bat
 src-tauri/gen/android/local.properties
