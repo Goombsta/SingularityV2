@@ -1,7 +1,6 @@
 package com.singularity.app.kotlin
 
 import com.android.build.api.dsl.ApplicationExtension
-import com.singularity.app.kotlin.BuildTask
 import org.gradle.api.DefaultTask
 import org.gradle.api.Plugin
 import org.gradle.api.Project
