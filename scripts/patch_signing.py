@@ -15,22 +15,23 @@ sp = os.environ["ANDROID_STORE_PASSWORD"]
 ka = os.environ["ANDROID_KEY_ALIAS"]
 kpass = os.environ["ANDROID_KEY_PASSWORD"]
 
-# Build the signingConfigs block
+# signingConfigs must live INSIDE the android { } block in Kotlin DSL.
+# Inject it right after "android {" on its own line.
 signing_block = (
-    'signingConfigs {\n'
-    '    create("release") {\n'
-    '        storeFile = file("' + kp + '")\n'
-    '        storePassword = "' + sp + '"\n'
-    '        keyAlias = "' + ka + '"\n'
-    '        keyPassword = "' + kpass + '"\n'
+    '\n    signingConfigs {\n'
+    '        create("release") {\n'
+    '            storeFile = file("' + kp + '")\n'
+    '            storePassword = "' + sp + '"\n'
+    '            keyAlias = "' + ka + '"\n'
+    '            keyPassword = "' + kpass + '"\n'
+    '        }\n'
     '    }\n'
-    '}\n'
 )
 
-# Inject signingConfigs before the android { block
 if 'signingConfigs' not in app:
-    app = app.replace('android {', signing_block + 'android {')
-    print("signingConfigs block added")
+    # Insert right after the "android {" opening line
+    app = app.replace('android {\n', 'android {' + signing_block, 1)
+    print("signingConfigs block added inside android { }")
 
 # Wire signingConfig into the release build type
 if 'signingConfig = signingConfigs' not in app:
