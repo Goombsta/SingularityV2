@@ -446,3 +446,14 @@
   background: linear-gradient(90deg, #6366f1, #a855f7);
   transition: width 0.2s ease-out;
 }
+.about-progress-indeterminate {
+  height: 100%;
+  width: 40%;
+  background: linear-gradient(90deg, #6366f1, #a855f7);
+  border-radius: 3px;
+  animation: about-progress-slide 1.2s ease-in-out infinite;
+}
+@keyframes about-progress-slide {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}

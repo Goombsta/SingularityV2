@@ -480,11 +480,11 @@ function AboutSettings() {
   const [downloadedPath, setDownloadedPath] = useState<string | null>(null)
   const [downloadError, setDownloadError] = useState<string | null>(null)
   const [progress, setProgress] = useState<{ downloaded: number; total: number | null }>({ downloaded: 0, total: null })
-  const currentPlatform = (() => { try { return platform() } catch { return 'windows' } })()
-  const isAndroid = currentPlatform === 'android'
+  const [isAndroid, setIsAndroid] = useState(false)
 
   useEffect(() => {
     getVersion().then(setVersion).catch(() => setVersion(null))
+    platform().then((p) => setIsAndroid(p === 'android')).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -591,14 +591,16 @@ function AboutSettings() {
                   <button className="about-download-btn checking" disabled>
                     <span className="about-spinner" />Downloading… {formatProgress(progress)}
                   </button>
-                  {progress.total ? (
-                    <div className="about-progress-track">
+                  <div className="about-progress-track">
+                    {progress.total ? (
                       <div
                         className="about-progress-fill"
                         style={{ width: `${Math.min(100, (progress.downloaded / progress.total) * 100).toFixed(1)}%` }}
                       />
-                    </div>
-                  ) : null}
+                    ) : (
+                      <div className="about-progress-indeterminate" />
+                    )}
+                  </div>
                 </>
               ) : updateState === 'downloaded' || updateState === 'install-permission' ? (
                 <button className="about-download-btn" onClick={installUpdate}>
