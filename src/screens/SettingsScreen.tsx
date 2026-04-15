@@ -530,7 +530,7 @@ function AboutSettings() {
       setDownloadedPath(path)
       setUpdateState('downloaded')
     } catch (e) {
-      setDownloadError(String(e))
+      setDownloadError(typeof e === 'string' ? e : (e as any)?.message ?? JSON.stringify(e))
       setUpdateState('download-error')
     }
   }
@@ -549,7 +549,7 @@ function AboutSettings() {
         await invoke('install_update', { path: downloadedPath })
       }
     } catch (e) {
-      setDownloadError(String(e))
+      setDownloadError(typeof e === 'string' ? e : (e as any)?.message ?? JSON.stringify(e))
       setUpdateState('download-error')
     }
   }
