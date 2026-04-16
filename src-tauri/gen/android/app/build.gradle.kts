@@ -14,14 +14,6 @@ val tauriProperties = Properties().apply {
 }
 
 android {
-    signingConfigs {
-        create("release") {
-            storeFile = file("C:/All Code/apk key/Singularitydeux/Singularitydeux")
-            storePassword = "Flam3boy!!"
-            keyAlias = "singularitydeux"
-            keyPassword = "Flam3boy!!"
-        }
-    }
     compileSdk = 36
     namespace = "com.singularity.app"
     defaultConfig {
