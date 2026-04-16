@@ -1,3 +1,9 @@
+# Keep MPVLib JNI callbacks — libplayer.so calls these as static methods via JNI.
+# R8 would strip them in release builds since they are not referenced from Kotlin/Java code.
+-keep class is.xyz.mpv.MPVLib {
+    public static *;
+}
+
 # Add project specific ProGuard rules here.
 # You can control the set of applied configuration files using the
 # proguardFiles setting in build.gradle.

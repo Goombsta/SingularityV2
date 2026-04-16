@@ -46,10 +46,12 @@ class MpvPlugin(private val activity: android.app.Activity) : Plugin(activity) {
 
     @Command
     fun mpvCreate(invoke: Invoke) {
-        val args = invoke.parseArgs(MpvCreateArgs::class.java)
+        val args = invoke.getArgs()
+        val playerId = args.getString("playerId")
         activity.runOnUiThread {
+            var surfaceView: SurfaceView? = null
             try {
-                val surfaceView = SurfaceView(activity)
+                surfaceView = SurfaceView(activity)
                 surfaceView.id = android.view.View.generateViewId()
 
                 // Always MATCH_PARENT — MPV handles aspect ratio internally.
@@ -71,9 +73,15 @@ class MpvPlugin(private val activity: android.app.Activity) : Plugin(activity) {
                 val ps = PlayerSurface(surfaceView)
                 surfaceView.holder.addCallback(ps)
 
-                players[args.playerId] = ps
+                players[playerId] = ps
                 invoke.resolve()
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
+                // Remove the SurfaceView from the hierarchy if it was added before the failure,
+                // otherwise it leaks and occludes the WebView (grey screen visible through
+                // the transparent WebView background).
+                surfaceView?.let { sv ->
+                    (sv.parent as? ViewGroup)?.removeView(sv)
+                }
                 invoke.reject(e.message ?: "Failed to create MPV player")
             }
         }
@@ -81,21 +89,23 @@ class MpvPlugin(private val activity: android.app.Activity) : Plugin(activity) {
 
     @Command
     fun mpvLoadUrl(invoke: Invoke) {
-        val args = invoke.parseArgs(MpvUrlArgs::class.java)
-        if (players[args.playerId] == null) {
-            invoke.reject("Player not found: ${args.playerId}")
+        val args = invoke.getArgs()
+        val playerId = args.getString("playerId")
+        val url = args.getString("url")
+        if (players[playerId] == null) {
+            invoke.reject("Player not found: $playerId")
             return
         }
         activity.runOnUiThread {
-            MPVLib.command(arrayOf("loadfile", args.url, "replace"))
+            MPVLib.command(arrayOf("loadfile", url, "replace"))
             invoke.resolve()
         }
     }
 
     @Command
     fun mpvPause(invoke: Invoke) {
-        val args = invoke.parseArgs(MpvIdArgs::class.java)
-        players[args.playerId] ?: run { invoke.reject("Player not found"); return }
+        val playerId = invoke.getArgs().getString("playerId")
+        players[playerId] ?: run { invoke.reject("Player not found"); return }
         activity.runOnUiThread {
             MPVLib.setPropertyBoolean("pause", true)
             invoke.resolve()
@@ -104,8 +114,8 @@ class MpvPlugin(private val activity: android.app.Activity) : Plugin(activity) {
 
     @Command
     fun mpvResume(invoke: Invoke) {
-        val args = invoke.parseArgs(MpvIdArgs::class.java)
-        players[args.playerId] ?: run { invoke.reject("Player not found"); return }
+        val playerId = invoke.getArgs().getString("playerId")
+        players[playerId] ?: run { invoke.reject("Player not found"); return }
         activity.runOnUiThread {
             MPVLib.setPropertyBoolean("pause", false)
             invoke.resolve()
@@ -114,24 +124,29 @@ class MpvPlugin(private val activity: android.app.Activity) : Plugin(activity) {
 
     @Command
     fun mpvSetVolume(invoke: Invoke) {
-        val args = invoke.parseArgs(MpvVolumeArgs::class.java)
-        players[args.playerId] ?: run { invoke.reject("Player not found"); return }
-        MPVLib.setPropertyInt("volume", args.volume.coerceIn(0, 100))
+        val args = invoke.getArgs()
+        val playerId = args.getString("playerId")
+        val volume = args.getInt("volume")
+        players[playerId] ?: run { invoke.reject("Player not found"); return }
+        MPVLib.setPropertyInt("volume", volume.coerceIn(0, 100))
         invoke.resolve()
     }
 
     @Command
     fun mpvSeek(invoke: Invoke) {
-        val args = invoke.parseArgs(MpvSeekArgs::class.java)
-        players[args.playerId] ?: run { invoke.reject("Player not found"); return }
-        MPVLib.command(arrayOf("seek", args.position.toString(), "absolute"))
+        val args = invoke.getArgs()
+        val playerId = args.getString("playerId")
+        val position = args.getDouble("position")
+        players[playerId] ?: run { invoke.reject("Player not found"); return }
+        MPVLib.command(arrayOf("seek", position.toString(), "absolute"))
         invoke.resolve()
     }
 
     @Command
     fun mpvResize(invoke: Invoke) {
-        val args = invoke.parseArgs(MpvResizeArgs::class.java)
-        val ps = players[args.playerId] ?: run { invoke.reject("Player not found"); return }
+        val args = invoke.getArgs()
+        val playerId = args.getString("playerId")
+        val ps = players[playerId] ?: run { invoke.reject("Player not found"); return }
         activity.runOnUiThread {
             // Always MATCH_PARENT — the player is always full-screen on Android.
             val params = ps.surfaceView.layoutParams as? FrameLayout.LayoutParams
@@ -148,8 +163,8 @@ class MpvPlugin(private val activity: android.app.Activity) : Plugin(activity) {
 
     @Command
     fun playerGetProperties(invoke: Invoke) {
-        val args = invoke.parseArgs(MpvIdArgs::class.java)
-        if (players[args.playerId] == null) {
+        val playerId = invoke.getArgs().getString("playerId")
+        if (players[playerId] == null) {
             val obj = JSObject()
             obj.put("duration", 0.0)
             obj.put("position", 0.0)
@@ -170,8 +185,8 @@ class MpvPlugin(private val activity: android.app.Activity) : Plugin(activity) {
 
     @Command
     fun mpvGetTracks(invoke: Invoke) {
-        val args = invoke.parseArgs(MpvIdArgs::class.java)
-        players[args.playerId] ?: run { invoke.reject("Player not found"); return }
+        val playerId = invoke.getArgs().getString("playerId")
+        players[playerId] ?: run { invoke.reject("Player not found"); return }
         val trackListJson = MPVLib.getPropertyString("track-list") ?: "[]"
         val arr = JSONArray(trackListJson)
         val audio = JSArray()
@@ -196,32 +211,38 @@ class MpvPlugin(private val activity: android.app.Activity) : Plugin(activity) {
 
     @Command
     fun mpvSetAudioTrack(invoke: Invoke) {
-        val args = invoke.parseArgs(MpvTrackArgs::class.java)
-        players[args.playerId] ?: run { invoke.reject("Player not found"); return }
-        MPVLib.setPropertyInt("aid", args.trackId)
+        val args = invoke.getArgs()
+        val playerId = args.getString("playerId")
+        val trackId = args.getInt("trackId")
+        players[playerId] ?: run { invoke.reject("Player not found"); return }
+        MPVLib.setPropertyInt("aid", trackId)
         invoke.resolve()
     }
 
     @Command
     fun mpvSetSubTrack(invoke: Invoke) {
-        val args = invoke.parseArgs(MpvTrackArgs::class.java)
-        players[args.playerId] ?: run { invoke.reject("Player not found"); return }
-        MPVLib.setPropertyInt("sid", args.trackId)
+        val args = invoke.getArgs()
+        val playerId = args.getString("playerId")
+        val trackId = args.getInt("trackId")
+        players[playerId] ?: run { invoke.reject("Player not found"); return }
+        MPVLib.setPropertyInt("sid", trackId)
         invoke.resolve()
     }
 
     @Command
     fun mpvSetSubScale(invoke: Invoke) {
-        val args = invoke.parseArgs(MpvSubScaleArgs::class.java)
-        players[args.playerId] ?: run { invoke.reject("Player not found"); return }
-        MPVLib.setPropertyDouble("sub-scale", args.scale)
+        val args = invoke.getArgs()
+        val playerId = args.getString("playerId")
+        val scale = args.getDouble("scale")
+        players[playerId] ?: run { invoke.reject("Player not found"); return }
+        MPVLib.setPropertyDouble("sub-scale", scale)
         invoke.resolve()
     }
 
     @Command
     fun mpvDestroy(invoke: Invoke) {
-        val args = invoke.parseArgs(MpvIdArgs::class.java)
-        val ps = players.remove(args.playerId)
+        val playerId = invoke.getArgs().getString("playerId")
+        val ps = players.remove(playerId)
         activity.runOnUiThread {
             ps?.let { p ->
                 p.surfaceView.holder.removeCallback(p)
@@ -233,28 +254,4 @@ class MpvPlugin(private val activity: android.app.Activity) : Plugin(activity) {
             invoke.resolve()
         }
     }
-
-    // ── Arg classes ────────────────────────────────────────────────────────
-
-    class MpvCreateArgs {
-        var playerId: String = ""
-        var x: Int = 0
-        var y: Int = 0
-        var width: Int = 0
-        var height: Int = 0
-        var live: Boolean = false
-    }
-    class MpvIdArgs { var playerId: String = "" }
-    class MpvUrlArgs { var playerId: String = ""; var url: String = "" }
-    class MpvVolumeArgs { var playerId: String = ""; var volume: Int = 100 }
-    class MpvSeekArgs { var playerId: String = ""; var position: Double = 0.0 }
-    class MpvResizeArgs {
-        var playerId: String = ""
-        var x: Int = 0
-        var y: Int = 0
-        var width: Int = 0
-        var height: Int = 0
-    }
-    class MpvTrackArgs { var playerId: String = ""; var trackId: Int = -1 }
-    class MpvSubScaleArgs { var playerId: String = ""; var scale: Double = 1.0 }
 }

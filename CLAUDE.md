@@ -33,9 +33,8 @@ Android requires: Android Studio + NDK + `rustup target add aarch64-linux-androi
 - **React 18 + TypeScript** — frontend UI (100% shared across platforms)
 - **Zustand** — MVI state management (Intent → State → View)
 - **Rust** — all I/O: playlist parsing, EPG, network, credentials
-- **Video (Android)** — Kotlin `MpvSurfaceView` Tauri plugin (Phase 3 — not yet implemented)
-- **Video (Windows)** — `libmpv-sys` + child HWND (Phase 4 — not yet implemented)
-- **Current video** — HTML5 `<video>` element (works for many HLS/MP4 streams)
+- **Video (Android)** — Kotlin `MpvSurfaceView` Tauri plugin
+- **Video (Windows)** — `libmpv-sys` + child HWND
 
 ### Directory Structure
 
@@ -104,10 +103,9 @@ No CSS framework. Each component has a colocated `.css` file. Global design toke
 
 ## Key Implementation Notes
 
-### MPV Integration (not yet implemented)
+### MPV Integration
 - **Android**: Kotlin `MpvSurfaceView` sits below the Tauri WebView (WebView background transparent). Plugin registered in `MainActivity.kt`. Prebuilt `libmpv.so` in `jniLibs/arm64-v8a/`.
 - **Windows**: `libmpv-sys` Rust crate + child HWND created under Tauri window. `mpv-1.dll` bundled in resources.
-- **Current fallback**: HTML5 `<video>` in `PlayerScreen.tsx` — works for MP4/HLS streams via WebView.
 
 ### Credential Storage
 - Windows: `keyring` crate → Windows Credential Manager (`src-tauri/src/commands/credentials.rs`)
@@ -126,7 +124,6 @@ const isAndroid = (await platform()) === 'android'
 ```
 
 ## What's Not Yet Implemented
-## - Native MPV video (Android Kotlin plugin + Windows HWND bridge) — currently uses HTML5 video
 ## - Playlist persistence (currently in-memory only — resets on restart)
 - EPG grid view (channel × time slot layout)
 - Continue watching / watch history

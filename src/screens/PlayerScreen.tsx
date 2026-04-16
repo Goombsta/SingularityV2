@@ -105,7 +105,6 @@ export default function PlayerScreen() {
   const [muted, setMuted] = useState(false)
   const [fullscreen, setFullscreen] = useState(false)
   const [fading, setFading] = useState(false)
-  const [mpvError, setMpvError] = useState<string | null>(null)
   const [streamError, setStreamError] = useState(false)
   const [reconnecting, setReconnecting] = useState(false)
   const [reconnectKey, setReconnectKey] = useState(0)
@@ -213,7 +212,6 @@ export default function PlayerScreen() {
     // creates a different one, eliminating the race condition.
     const playerId = `player-${Math.random().toString(36).slice(2, 9)}`
     playerIdRef.current = playerId
-    setMpvError(null)
     let cancelled = false
 
     async function start() {
@@ -333,8 +331,6 @@ export default function PlayerScreen() {
 
       } catch (e) {
         if (!cancelled) {
-          const msg = typeof e === 'string' ? e : (e as any)?.message ?? JSON.stringify(e)
-          setMpvError(msg)
           mpvActiveRef.current = false
           setPlayerMode('html5')
         }
@@ -750,10 +746,6 @@ export default function PlayerScreen() {
           onWaiting={() => { if (state?.live !== false && !stallTimerRef.current) { stallTimerRef.current = setTimeout(triggerReconnect, 10000) } }}
           onError={() => { if (state?.live !== false) triggerReconnect(); else setStreamError(true) }}
         />
-      )}
-
-      {mpvError && (
-        <div className="player-error-badge">MPV: {mpvError}</div>
       )}
 
       {reconnecting && playerMode === 'html5' && (
