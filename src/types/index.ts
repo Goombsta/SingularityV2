@@ -103,6 +103,7 @@ export interface PlayerState {
   playlistId?: string
   returnTo?: string   // route to navigate to on back (e.g. '/epg')
   resumeKey?: string  // stable content identity key; undefined for live TV
+  posterUrl?: string  // poster art for resume entry persistence
 }
 
 export interface ResumeEntry {

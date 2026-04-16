@@ -52,6 +52,7 @@ export default function PosterCard({
       state: {
         url, title: item.name, playlistId: item.playlist_id, live: isLive,
         resumeKey: itemType === 'vod' ? `playlist:${item.playlist_id}:vod:${item.id}` : undefined,
+        posterUrl: poster,
       },
     })
   }
@@ -69,6 +70,7 @@ export default function PosterCard({
       state: {
         url, title: item.name, playlistId: item.playlist_id, live: isLive,
         resumeKey: itemType === 'vod' ? `playlist:${item.playlist_id}:vod:${item.id}` : undefined,
+        posterUrl: poster,
       },
     })
   }

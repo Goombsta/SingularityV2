@@ -258,11 +258,26 @@ export default function PlayerScreen() {
 
         await playerCmd('mpv_load_url', { playerId, url: state!.url })
 
-        // Seek to saved position after mpv initialises
+        // Seek to saved position — poll until mpv reports a known duration so the
+        // seek lands correctly (fixed delays are unreliable across network conditions).
         if (seekTo !== null && seekTo > 0) {
-          setTimeout(() => {
-            if (!cancelled) playerCmd('mpv_seek', { playerId, position: seekTo! }).catch(() => {})
-          }, 800)
+          let attempts = 0
+          const seekWhenReady = async () => {
+            if (cancelled || attempts++ > 12) return
+            try {
+              const props = await playerCmd<{ duration: number; position: number; paused: boolean; volume: number; idle: boolean }>(
+                'player_get_properties', { playerId }
+              )
+              if (props.duration > 0) {
+                await playerCmd('mpv_seek', { playerId, position: seekTo! })
+              } else {
+                setTimeout(seekWhenReady, 600)
+              }
+            } catch {
+              setTimeout(seekWhenReady, 600)
+            }
+          }
+          setTimeout(seekWhenReady, 600)
         }
 
         setPaused(false)
@@ -507,44 +522,71 @@ export default function PlayerScreen() {
       })
     }
 
-    if (isHls) {
-      // Always use HLS.js — never native browser HLS. Edge/WebView2 has added native
-      // HLS support, but that fetches segments directly with the browser's Origin/Referer
-      // which IPTV CDNs reject (404). HLS.js routes all requests through our local proxy.
-      if (Hls.isSupported()) {
-        startHls(undefined, undefined, true)
-      } else {
-        // Last-resort: try native. Will likely 404 on IPTV CDNs but lets us fail gracefully.
-        video.src = url
-        video.play().catch(() => {})
+    // Resume check + dispatch wrapped in async IIFE (same pattern as MPV path)
+    ;(async () => {
+      // ── Resume check for HTML5 path ─────────────────────────────────────────
+      let htmlSeekTo: number | null = null
+      if (state?.resumeKey && !isLive) {
+        try {
+          const entry = await invoke<ResumeEntry | null>('get_resume_position', { key: state.resumeKey })
+          if (!cancelled && entry && entry.position_sec > 30) {
+            setPendingResumeEntry(entry)
+            setShowResumePrompt(true)
+            htmlSeekTo = await new Promise<number | null>(resolve => { resumeDecisionRef.current = resolve })
+            resumeDecisionRef.current = null
+            setShowResumePrompt(false)
+            setPendingResumeEntry(null)
+          }
+        } catch { /* no resume — start from beginning */ }
       }
-    } else if (isNativeFormat) {
-      startNative()
-    } else if (isAndroidFallbackContainer) {
-      // MKV/AVI/FLV/WMV on Android — WebView can't demux these natively.
-      // Try mpegts.js first (many Xtream servers send MPEG-TS regardless of extension).
-      // mpegts.js error handler already falls back to startNative() on failure.
-      startMpegTs()
-    } else if (isExtensionless) {
-      // Xtream-style extensionless URL (live /live/.../id or VOD/series /series/.../id).
-      // Try HLS first, fall back to MPEG-TS, then native.
-      if (Hls.isSupported()) {
-        startHls(() => startMpegTs())
-      } else {
-        startMpegTs()
-      }
-    } else if (isMpegTs) {
-      // Explicit .ts URL — try HLS first with .m3u8 variant (works on Android WebView + Desktop),
-      // fall back to MPEG-TS player, then native
-      const hlsVariant = url.replace(/\.ts(\?|$)/i, '.m3u8$1')
-      if (Hls.isSupported()) {
-        startHls(() => startMpegTs(), hlsVariant)
-      } else {
-        startMpegTs()
-      }
-    }
+      if (cancelled) return
 
-    setUnsupportedAudioCodec(null)
+      // Seek to saved position once video has enough metadata to seek
+      if (htmlSeekTo !== null && htmlSeekTo > 0) {
+        video.addEventListener('loadedmetadata', () => {
+          if (!cancelled && video.seekable.length > 0) video.currentTime = htmlSeekTo!
+        }, { once: true })
+      }
+
+      setUnsupportedAudioCodec(null)
+
+      if (isHls) {
+        // Always use HLS.js — never native browser HLS. Edge/WebView2 has added native
+        // HLS support, but that fetches segments directly with the browser's Origin/Referer
+        // which IPTV CDNs reject (404). HLS.js routes all requests through our local proxy.
+        if (Hls.isSupported()) {
+          startHls(undefined, undefined, true)
+        } else {
+          // Last-resort: try native. Will likely 404 on IPTV CDNs but lets us fail gracefully.
+          video.src = url
+          video.play().catch(() => {})
+        }
+      } else if (isNativeFormat) {
+        startNative()
+      } else if (isAndroidFallbackContainer) {
+        // MKV/AVI/FLV/WMV on Android — WebView can't demux these natively.
+        // Try mpegts.js first (many Xtream servers send MPEG-TS regardless of extension).
+        // mpegts.js error handler already falls back to startNative() on failure.
+        startMpegTs()
+      } else if (isExtensionless) {
+        // Xtream-style extensionless URL (live /live/.../id or VOD/series /series/.../id).
+        // Try HLS first, fall back to MPEG-TS, then native.
+        if (Hls.isSupported()) {
+          startHls(() => startMpegTs())
+        } else {
+          startMpegTs()
+        }
+      } else if (isMpegTs) {
+        // Explicit .ts URL — try HLS first with .m3u8 variant (works on Android WebView + Desktop),
+        // fall back to MPEG-TS player, then native
+        const hlsVariant = url.replace(/\.ts(\?|$)/i, '.m3u8$1')
+        if (Hls.isSupported()) {
+          startHls(() => startMpegTs(), hlsVariant)
+        } else {
+          startMpegTs()
+        }
+      }
+    })()
     return () => {
       cancelled = true
       hlsRef.current?.destroy(); hlsRef.current = null
@@ -702,7 +744,7 @@ export default function PlayerScreen() {
     invoke('save_resume_position', {
       entry: {
         key, position_sec: pos, duration_sec: dur,
-        title: state?.title ?? '', poster_url: null,
+        title: state?.title ?? '', poster_url: state?.posterUrl ?? null,
         stream_url: state?.url ?? '',
         updated_at: Math.floor(Date.now() / 1000),
       },

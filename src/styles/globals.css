@@ -105,3 +105,64 @@ img { display: block; max-width: 100%; }
 a { color: inherit; text-decoration: none; }
 .drag-region { -webkit-app-region: drag; }
 .no-drag { -webkit-app-region: no-drag; }
+
+/* ── Continue Watching progress bar ── */
+.continue-progress-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 0 0 var(--radius) var(--radius);
+  overflow: hidden;
+  z-index: 5;
+}
+.continue-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 0 0 var(--radius) var(--radius);
+  transition: width 300ms ease;
+}
+.continue-remaining {
+  position: absolute;
+  bottom: 6px;
+  left: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+  z-index: 6;
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+.home-row-card:hover .continue-remaining {
+  opacity: 1;
+}
+
+/* ── Continue Watching dismiss button ── */
+.cw-dismiss-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.75);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity var(--transition), background var(--transition);
+  z-index: 10;
+  cursor: pointer;
+  line-height: 1;
+}
+.home-row-card:hover .cw-dismiss-btn {
+  opacity: 1;
+}
+.cw-dismiss-btn:hover {
+  background: rgba(220, 38, 38, 0.85);
+}

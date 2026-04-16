@@ -4,11 +4,12 @@ import { useNavigate } from 'react-router-dom'
 import HeroBanner from '../components/common/HeroBanner'
 import HorizontalRow from '../components/common/HorizontalRow'
 import { usePlaylistStore } from '../store/slices/playlistSlice'
+import { useResumeStore } from '../store/slices/resumeSlice'
 import { useUiStore } from '../store/slices/uiSlice'
 import { groupByExcelCategories, deduplicateItems, extractBaseTitle, matchesTrendingTitle } from '../utils/genreMap'
 import { MOVIE_CATEGORY_ORDER, MOVIE_TITLE_MAP } from '../data/movieCategories'
 import { SERIES_CATEGORY_ORDER, SERIES_TITLE_MAP } from '../data/seriesCategories'
-import type { Series, VodItem } from '../types'
+import type { ResumeEntry, Series, VodItem } from '../types'
 import './HomeScreen.css'
 
 type HomeTab = 'favorites' | 'movies' | 'series'
@@ -21,8 +22,8 @@ interface TmdbTrendingItem {
 
 /** Small card used in carousel rows */
 function RowCard({
-  poster, name, rating, versions, onClick,
-}: { poster?: string; name: string; rating?: string; versions?: number; onClick: () => void }) {
+  poster, name, rating, versions, onClick, progress,
+}: { poster?: string; name: string; rating?: string; versions?: number; onClick: () => void; progress?: number | null }) {
   const cleanName = extractBaseTitle(name) || name
   return (
     <div className="home-row-card" onClick={onClick}>
@@ -35,6 +36,53 @@ function RowCard({
         {rating && <span className="home-row-rating">★ {parseFloat(rating).toFixed(1)}</span>}
         {versions && versions > 1 && <span className="vod-row-versions">{versions} ver.</span>}
         <p className="home-row-name">{cleanName}</p>
+        {progress != null && progress > 0 && (
+          <div className="continue-progress-bar">
+            <div className="continue-progress-fill" style={{ width: `${Math.min(progress, 1) * 100}%` }} />
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** Resolve poster for a resume entry from the in-memory VOD/Series catalog (fallback for old entries with null poster_url) */
+function resolveEntryPoster(key: string, vods: VodItem[], seriesList: Series[]): string | undefined {
+  const vodMatch = key.match(/^playlist:[^:]+:vod:(.+)$/)
+  if (vodMatch) return vods.find((v) => v.id === vodMatch[1])?.poster
+  const seriesMatch = key.match(/^playlist:[^:]+:series:([^:]+):/)
+  if (seriesMatch) return seriesList.find((s) => s.id === seriesMatch[1])?.poster
+  return undefined
+}
+
+/** Card for the Continue Watching row */
+function ContinueWatchingCard({ entry, posterUrl, onClick, onDismiss }: {
+  entry: ResumeEntry
+  posterUrl?: string
+  onClick: () => void
+  onDismiss: (e: React.MouseEvent) => void
+}) {
+  const progress = entry.duration_sec > 0 ? entry.position_sec / entry.duration_sec : 0
+  const remaining = entry.duration_sec - entry.position_sec
+  const remainLabel = remaining > 3600
+    ? `${Math.floor(remaining / 3600)}h ${Math.floor((remaining % 3600) / 60)}m left`
+    : `${Math.ceil(remaining / 60)}m left`
+
+  return (
+    <div className="home-row-card" onClick={onClick}>
+      <div className="home-row-img-wrap">
+        {posterUrl
+          ? <img src={posterUrl} alt={entry.title} className="home-row-poster" loading="lazy"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+          : <div className="home-row-placeholder">{entry.title.charAt(0)}</div>
+        }
+        <div className="home-row-hover">▶</div>
+        <button className="cw-dismiss-btn" onClick={onDismiss} title="Dismiss" aria-label="Remove from Continue Watching">✕</button>
+        <p className="home-row-name" style={{ opacity: 1 }}>{entry.title}</p>
+        <div className="continue-progress-bar">
+          <div className="continue-progress-fill" style={{ width: `${progress * 100}%` }} />
+        </div>
+        <span className="continue-remaining">{remainLabel}</span>
       </div>
     </div>
   )
@@ -42,6 +90,7 @@ function RowCard({
 
 export default function HomeScreen() {
   const { activePlaylistId, vods, series, status, fetchVod, fetchSeries } = usePlaylistStore()
+  const { entries: resumeEntries, loadResumeEntries, clearEntry } = useResumeStore()
   const { favorites } = useUiStore()
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<HomeTab>('movies')
@@ -55,6 +104,14 @@ export default function HomeScreen() {
     fetchVod(activePlaylistId)
     fetchSeries(activePlaylistId)
   }, [activePlaylistId, fetchVod, fetchSeries])
+
+  // Load resume entries and refresh when returning from player
+  useEffect(() => {
+    loadResumeEntries()
+    const onVisibility = () => { if (document.visibilityState === 'visible') loadResumeEntries() }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => document.removeEventListener('visibilitychange', onVisibility)
+  }, [loadResumeEntries])
 
   // Fetch trending: TMDB if key present, else IMDb RSS fallback
   useEffect(() => {
@@ -246,6 +303,31 @@ export default function HomeScreen() {
           </button>
         ))}
       </div>
+
+      {/* ── Continue Watching ── */}
+      {resumeEntries.length > 0 && (
+        <div className="home-rows" style={{ paddingTop: 0 }}>
+          <HorizontalRow title="Continue Watching">
+            {resumeEntries.slice(0, 20).map((entry) => (
+              <ContinueWatchingCard
+                key={entry.key}
+                entry={entry}
+                posterUrl={entry.poster_url ?? resolveEntryPoster(entry.key, vods, series)}
+                onClick={() => navigate('/player', {
+                  state: {
+                    url: entry.stream_url,
+                    title: entry.title,
+                    live: false,
+                    resumeKey: entry.key,
+                    posterUrl: entry.poster_url ?? resolveEntryPoster(entry.key, vods, series),
+                  },
+                })}
+                onDismiss={(e) => { e.stopPropagation(); clearEntry(entry.key) }}
+              />
+            ))}
+          </HorizontalRow>
+        </div>
+      )}
 
       {/* ── Favorites tab ── */}
       {activeTab === 'favorites' && (

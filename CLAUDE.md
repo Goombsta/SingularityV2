@@ -126,5 +126,4 @@ const isAndroid = (await platform()) === 'android'
 ## What's Not Yet Implemented
 ## - Playlist persistence (currently in-memory only — resets on restart)
 - EPG grid view (channel × time slot layout)
-- Continue watching / watch history
 
