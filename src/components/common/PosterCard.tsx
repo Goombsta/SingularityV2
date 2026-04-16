@@ -40,7 +40,12 @@ export default function PosterCard({
       onPlay()
       return
     }
-    // Channels play immediately; VOD/series should use onSelect from parent
+    // Series items open the series detail page
+    if (itemType === 'series') {
+      navigate('/series', { state: { preSelectedItem: item } })
+      return
+    }
+    // Channels play immediately; VOD should use onSelect from parent
     const url = 'stream_url' in item ? item.stream_url : ''
     const isLive = itemType === 'channel'
     navigate('/player', {
@@ -54,6 +59,10 @@ export default function PosterCard({
   const handlePlayClick = (e: React.MouseEvent) => {
     e.stopPropagation()
     if (onPlay) { onPlay(); return }
+    if (itemType === 'series') {
+      navigate('/series', { state: { preSelectedItem: item } })
+      return
+    }
     const url = 'stream_url' in item ? item.stream_url : ''
     const isLive = itemType === 'channel'
     navigate('/player', {
