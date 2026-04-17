@@ -104,6 +104,13 @@ export interface PlayerState {
   returnTo?: string   // route to navigate to on back (e.g. '/epg')
   resumeKey?: string  // stable content identity key; undefined for live TV
   posterUrl?: string  // poster art for resume entry persistence
+  // Series auto-play context (only set for series episodes)
+  seriesSeasons?: Record<string, Episode[]>
+  currentEpisodeId?: string
+  seriesName?: string
+  seriesId?: string
+  seriesPlaylistId?: string
+  seriesPoster?: string
 }
 
 export interface ResumeEntry {

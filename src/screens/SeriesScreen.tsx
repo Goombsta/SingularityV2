@@ -200,6 +200,12 @@ export default function SeriesScreen() {
         live: false,
         resumeKey: `playlist:${selected?.series.playlist_id}:series:${selected?.series.id}:episode:${ep.id}`,
         posterUrl: ep.poster ?? selected?.series.poster,
+        seriesSeasons: selected?.seasons,
+        currentEpisodeId: ep.id,
+        seriesName: selected?.series.name,
+        seriesId: selected?.series.id,
+        seriesPlaylistId: selected?.series.playlist_id,
+        seriesPoster: selected?.series.poster,
       },
     })
   }

@@ -4,7 +4,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { platform } from '@tauri-apps/plugin-os'
 import Hls from 'hls.js'
 import mpegts from 'mpegts.js'
-import type { PlayerState, ResumeEntry } from '../types'
+import type { Episode, PlayerState, ResumeEntry } from '../types'
 import './PlayerScreen.css'
 
 // 'pending' = still determining which player to use (MPV initialising on Windows)
@@ -58,6 +58,22 @@ function getPlatform(): string {
 }
 function isWindowsPlatform(): boolean { return getPlatform() === 'windows' }
 function isAndroidPlatform(): boolean { return getPlatform() === 'android' }
+
+function getNextEpisode(seasons: Record<string, Episode[]>, currentEpisodeId: string): Episode | null {
+  const sortedSeasons = Object.keys(seasons).sort((a, b) => Number(a) - Number(b))
+  for (let si = 0; si < sortedSeasons.length; si++) {
+    const episodes = seasons[sortedSeasons[si]].slice().sort((a, b) => a.episode_num - b.episode_num)
+    const idx = episodes.findIndex(ep => ep.id === currentEpisodeId)
+    if (idx === -1) continue
+    if (idx + 1 < episodes.length) return episodes[idx + 1]
+    if (si + 1 < sortedSeasons.length) {
+      const nextSeasonEps = seasons[sortedSeasons[si + 1]].slice().sort((a, b) => a.episode_num - b.episode_num)
+      if (nextSeasonEps.length > 0) return nextSeasonEps[0]
+    }
+    return null
+  }
+  return null
+}
 
 // Android native player plugin namespace. Swap 'vlc' → 'mpv' once MPV codec gates pass.
 const ANDROID_PLAYER_PLUGIN = 'mpv'
@@ -122,6 +138,15 @@ export default function PlayerScreen() {
   const [showTracksPanel, setShowTracksPanel] = useState(false)
   const [subtitleSize, setSubtitleSize] = useState(1) // 0=Small 1=Normal 2=Large 3=Huge
   const [showTechStats, setShowTechStats] = useState(false)
+
+  // Next episode auto-play
+  const nextEpisode = state?.seriesSeasons && state?.currentEpisodeId
+    ? getNextEpisode(state.seriesSeasons, state.currentEpisodeId)
+    : null
+  const [showNextEpisode, setShowNextEpisode] = useState(false)
+  const [autoPlayCountdown, setAutoPlayCountdown] = useState<number | null>(null)
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const autoPlayTriggeredRef = useRef(false)
 
   // Tech stats — polled from HTML5 video element or mpv
   const [techStats, setTechStats] = useState({
@@ -317,6 +342,10 @@ export default function PlayerScreen() {
               document.body.style.background = 'transparent'
               const root = document.getElementById('root')
               if (root) root.style.background = 'transparent'
+            }
+            // VOD end-of-file: idle after playing (duration was known)
+            if (props.idle && durationRef.current > 0 && state?.live === false) {
+              startCountdown()
             }
             // 5-second grace period, then require 10 consecutive idle polls before flagging error
             if (pollCount > 5 && props.idle && props.duration === 0) {
@@ -760,6 +789,81 @@ export default function PlayerScreen() {
     }, 280)
   }
 
+  const cancelCountdown = () => {
+    if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null }
+    setAutoPlayCountdown(null)
+  }
+
+  const playNextEpisode = useCallback(() => {
+    if (!nextEpisode || !state) return
+    cancelCountdown()
+    if (state.resumeKey) invoke('clear_resume_position', { key: state.resumeKey }).catch(() => {})
+    navigate('/player', {
+      replace: true,
+      state: {
+        url: nextEpisode.stream_url,
+        title: `${state.seriesName} S${nextEpisode.season}E${nextEpisode.episode_num}`,
+        live: false,
+        resumeKey: `playlist:${state.seriesPlaylistId}:series:${state.seriesId}:episode:${nextEpisode.id}`,
+        posterUrl: nextEpisode.poster ?? state.seriesPoster,
+        seriesSeasons: state.seriesSeasons,
+        currentEpisodeId: nextEpisode.id,
+        seriesName: state.seriesName,
+        seriesId: state.seriesId,
+        seriesPlaylistId: state.seriesPlaylistId,
+        seriesPoster: state.seriesPoster,
+      },
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nextEpisode, state])
+
+  const startCountdown = useCallback(() => {
+    if (autoPlayTriggeredRef.current) return
+    autoPlayTriggeredRef.current = true
+    if (nextEpisode) {
+      setAutoPlayCountdown(10)
+      countdownRef.current = setInterval(() => {
+        setAutoPlayCountdown(prev => {
+          if (prev === null) return null
+          if (prev <= 1) {
+            if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null }
+            return 0
+          }
+          return prev - 1
+        })
+      }, 1000)
+    } else {
+      // No next episode — go back to series screen
+      handleBack()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nextEpisode])
+
+  // When countdown hits 0, auto-play
+  useEffect(() => {
+    if (autoPlayCountdown === 0) playNextEpisode()
+  }, [autoPlayCountdown, playNextEpisode])
+
+  // Cleanup countdown on unmount
+  useEffect(() => {
+    return () => { if (countdownRef.current) clearInterval(countdownRef.current) }
+  }, [])
+
+  // Show "Next Episode" button in last 30 seconds (VOD series only)
+  useEffect(() => {
+    if (state?.live !== false || !nextEpisode || duration <= 0) return
+    const nearEnd = position >= duration - 30
+    setShowNextEpisode(nearEnd)
+  }, [position, duration, state?.live, nextEpisode])
+
+  // Primary end-of-playback detection: position-based (works for all player modes/stream types)
+  // onEnded and MPV idle checks are unreliable for HLS.js/mpegts.js/plugin VOD streams.
+  useEffect(() => {
+    if (state?.live !== false || duration <= 0 || autoPlayTriggeredRef.current) return
+    if (position > 0 && position >= duration - 1) startCountdown()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [position, duration, state?.live])
+
   if (!state) return null
 
   return (
@@ -783,7 +887,7 @@ export default function PlayerScreen() {
           onPlay={() => setPaused(false)}
           onPause={() => { setPaused(true); saveResume() }}
           onPlaying={() => { clearStallTimer(); setReconnecting(false) }}
-          onEnded={() => { if (state?.live !== false) triggerReconnect() }}
+          onEnded={() => { if (state?.live !== false) triggerReconnect(); else startCountdown() }}
           onStalled={() => { if (state?.live !== false) { clearStallTimer(); stallTimerRef.current = setTimeout(triggerReconnect, 10000) } }}
           onWaiting={() => { if (state?.live !== false && !stallTimerRef.current) { stallTimerRef.current = setTimeout(triggerReconnect, 10000) } }}
           onError={() => { if (state?.live !== false) triggerReconnect(); else setStreamError(true) }}
@@ -875,6 +979,28 @@ export default function PlayerScreen() {
           <div className="tech-stats-section-label">NETWORK</div>
           <div className="tech-stats-row"><span>BUFFER</span><span className={`ts-val ${parseFloat(techStats.buffer) < 2 ? 'ts-red' : 'ts-orange'}`}>{techStats.buffer}</span></div>
           <div className="tech-stats-row"><span>DROPPED FRAMES</span><span className={`ts-val ${techStats.droppedFrames !== '0' ? 'ts-red' : 'ts-green'}`}>{techStats.droppedFrames}</span></div>
+        </div>
+      )}
+
+      {/* Next Episode overlay */}
+      {nextEpisode && (showNextEpisode || autoPlayCountdown !== null) && (
+        <div className={`next-episode-overlay ${autoPlayCountdown !== null ? 'next-episode-overlay--countdown' : ''}`} onClick={(e) => e.stopPropagation()}>
+          {autoPlayCountdown !== null ? (
+            <>
+              <div className="next-ep-label">Next episode in {autoPlayCountdown}…</div>
+              <div className="next-ep-title">S{nextEpisode.season}E{nextEpisode.episode_num}{nextEpisode.title ? ` — ${nextEpisode.title}` : ''}</div>
+              <div className="next-ep-actions">
+                <button className="next-ep-btn next-ep-btn--primary" onClick={playNextEpisode}>Play Now</button>
+                <button className="next-ep-btn next-ep-btn--secondary" onClick={cancelCountdown}>Cancel</button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="next-ep-label">Up Next</div>
+              <div className="next-ep-title">S{nextEpisode.season}E{nextEpisode.episode_num}{nextEpisode.title ? ` — ${nextEpisode.title}` : ''}</div>
+              <button className="next-ep-btn next-ep-btn--primary" onClick={playNextEpisode}>Next Episode ▶</button>
+            </>
+          )}
         </div>
       )}
 

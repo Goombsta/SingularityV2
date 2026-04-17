@@ -623,3 +623,78 @@
   color: rgba(255, 255, 255, 0.8);
   border: 1px solid rgba(255, 255, 255, 0.15);
 }
+
+/* ── Next Episode overlay ─────────────────────────────────────────────────── */
+.next-episode-overlay {
+  position: absolute;
+  bottom: 110px;
+  right: 24px;
+  z-index: 50;
+  background: rgba(14, 10, 30, 0.92);
+  border: 1px solid rgba(124, 58, 237, 0.35);
+  border-radius: 12px;
+  padding: 16px 20px;
+  min-width: 240px;
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: next-ep-slide-in 0.25s ease;
+  backdrop-filter: blur(8px);
+}
+
+@keyframes next-ep-slide-in {
+  from { opacity: 0; transform: translateX(20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.next-ep-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #7c3aed;
+}
+
+.next-episode-overlay--countdown .next-ep-label {
+  color: #a78bfa;
+}
+
+.next-ep-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.next-ep-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.next-ep-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s;
+  white-space: nowrap;
+}
+.next-ep-btn:hover { opacity: 0.85; }
+
+.next-ep-btn--primary {
+  background: #7c3aed;
+  color: #fff;
+}
+
+.next-ep-btn--secondary {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
