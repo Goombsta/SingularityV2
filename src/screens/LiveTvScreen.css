@@ -592,6 +592,12 @@
   font-size: 14px;
 }
 
+/* ── CC Toggle ── */
+.livetv-ctrl-btn.livetv-cc-btn.active {
+  color: #ffcc00;
+  opacity: 1;
+}
+
 /* ── Tech Stats ── */
 .livetv-ctrl-btn.livetv-tech-stats-btn.active {
   color: var(--accent-light, #a78bfa);

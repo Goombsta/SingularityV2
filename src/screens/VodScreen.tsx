@@ -35,7 +35,7 @@ interface TmdbMeta {
 }
 
 export default function VodScreen() {
-  const { activePlaylistId, vods, fetchVod, status } = usePlaylistStore()
+  const { activePlaylistId, vods, fetchVod, status, enrichVodMetadata } = usePlaylistStore()
   const { addFavorite, removeFavorite, isFavorite } = useUiStore()
   const navigate = useNavigate()
   const location = useLocation()
@@ -56,16 +56,8 @@ export default function VodScreen() {
   }, [activePlaylistId, fetchVod])
 
   useEffect(() => {
-    ;(async () => {
-      const tmdbKey = await invoke<string | null>('get_credential', { key: 'tmdb_api_key' }).catch(() => null) || localStorage.getItem('tmdb_api_key') || ''
-      if (tmdbKey) {
-        invoke<TmdbTrendingItem[]>('fetch_tmdb_trending', { mediaType: 'movie', apiKey: tmdbKey })
-          .then(setTmdbTrendingMovies).catch(() => {})
-      } else {
-        invoke<string[]>('fetch_imdb_trending', { mediaType: 'movie' })
-          .then(setImdbMovies).catch(() => {})
-      }
-    })()
+    invoke<TmdbTrendingItem[]>('fetch_tmdb_trending', { mediaType: 'movie' })
+      .then(setTmdbTrendingMovies).catch(() => {})
   }, [])
 
   // Direct item passed via navigation state (TMDB-only or catalog item) — no catalog lookup needed
@@ -84,24 +76,21 @@ export default function VodScreen() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routeState, vods])
 
-  const fetchMeta = async (name: string, year?: string) => {
+  const fetchMeta = async (name: string, year?: string, vodId?: string) => {
     setTmdb(null)
     setOmdb(null)
     setSimilarTmdb([])
-    const tmdbKey = await invoke<string | null>('get_credential', { key: 'tmdb_api_key' }).catch(() => null) || localStorage.getItem('tmdb_api_key') || ''
-    if (tmdbKey) {
-      try {
-        const meta = await invoke<TmdbMeta>('fetch_tmdb', {
-          title: name, year: year ?? null, mediaType: 'movie', apiKey: tmdbKey,
-        })
-        setTmdb(meta)
-        // Fetch curated similar titles in the background — don't await
-        invoke<TmdbTrendingItem[]>('fetch_tmdb_similar', {
-          tmdbId: meta.tmdbId, mediaType: 'movie', apiKey: tmdbKey,
-        }).then(setSimilarTmdb).catch(() => {})
-        return
-      } catch { /* fall through to OMDb */ }
-    }
+    try {
+      const meta = await invoke<TmdbMeta>('fetch_tmdb', {
+        title: name, year: year ?? null, mediaType: 'movie',
+      })
+      setTmdb(meta)
+      if (vodId) enrichVodMetadata(vodId, { poster: meta.posterUrl, backdrop: meta.backdropUrl })
+      invoke<TmdbTrendingItem[]>('fetch_tmdb_similar', {
+        tmdbId: meta.tmdbId, mediaType: 'movie',
+      }).then(setSimilarTmdb).catch(() => {})
+      return
+    } catch { /* fall through to OMDb */ }
     const omdbKey = await invoke<string | null>('get_credential', { key: 'omdb_api_key' }).catch(() => null) || localStorage.getItem('omdb_api_key') || ''
     if (omdbKey) {
       try {
@@ -118,7 +107,7 @@ export default function VodScreen() {
       : { ...v, _region: 'Default', _versions: [{ ...v, _region: 'Default' }] }
     setSelected(versioned)
     const cleanName = extractBaseTitle(v.name) || v.name
-    await fetchMeta(cleanName, v.year)
+    await fetchMeta(cleanName, v.year, v.id)
   }
 
   const filtered = useMemo(() => {

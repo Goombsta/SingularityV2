@@ -102,6 +102,7 @@ pub fn run() {
             commands::tmdb::fetch_tmdb,
             commands::tmdb::fetch_tmdb_trending,
             commands::tmdb::fetch_tmdb_similar,
+            commands::tmdb::fetch_tmdb_season,
             // IMDb trending
             commands::trending::fetch_imdb_trending,
             // Native MPV — desktop only

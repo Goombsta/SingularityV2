@@ -342,38 +342,15 @@ function EpgSettings() {
 type TestState = 'idle' | 'testing' | 'ok' | 'fail'
 
 function IntegrationsSettings() {
-  const [tmdbKey, setTmdbKey] = useState('')
   const [omdbKey, setOmdbKey] = useState('')
-  const [tmdbTest, setTmdbTest] = useState<TestState>('idle')
-  const [tmdbError, setTmdbError] = useState('')
   const [omdbTest, setOmdbTest] = useState<TestState>('idle')
   const [omdbError, setOmdbError] = useState('')
 
-  // Load saved keys from credential storage, fall back to localStorage
   useEffect(() => {
-    invoke<string | null>('get_credential', { key: 'tmdb_api_key' })
-      .catch(() => null)
-      .then((v) => setTmdbKey(v || localStorage.getItem('tmdb_api_key') || ''))
     invoke<string | null>('get_credential', { key: 'omdb_api_key' })
       .catch(() => null)
       .then((v) => setOmdbKey(v || localStorage.getItem('omdb_api_key') || ''))
   }, [])
-
-  const saveTmdb = async () => {
-    const key = tmdbKey.trim()
-    if (!key) return
-    setTmdbTest('testing')
-    setTmdbError('')
-    try {
-      await invoke('fetch_tmdb', { title: 'Inception', year: '2010', mediaType: 'movie', apiKey: key })
-      await invoke('store_credential', { key: 'tmdb_api_key', value: key }).catch(() => {})
-      localStorage.setItem('tmdb_api_key', key)
-      setTmdbTest('ok')
-    } catch (e) {
-      setTmdbTest('fail')
-      setTmdbError(String(e))
-    }
-  }
 
   const saveOmdb = async () => {
     const key = omdbKey.trim()
@@ -393,40 +370,11 @@ function IntegrationsSettings() {
 
   return (
     <div className="settings-section">
-      {/* TMDB — preferred source */}
+      {/* OMDb — optional enrichment */}
       <div className="integration-card">
-        <h3 className="integration-title">TMDB — Movie &amp; TV Metadata <span className="integration-badge">Recommended</span></h3>
+        <h3 className="integration-title">OMDb — IMDb Ratings &amp; Awards <span className="integration-badge secondary">Optional</span></h3>
         <p className="integration-desc">
-          HD posters, backdrops, cast photos, trailers, genres and ratings from The Movie Database.
-          Free with no daily limit. Get a key at{' '}
-          <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noreferrer" className="integration-link">
-            themoviedb.org
-          </a>.
-        </p>
-        <div className="integration-row">
-          <input
-            className="integration-input"
-            type="text"
-            placeholder="Your TMDB API key (v3 auth)"
-            value={tmdbKey}
-            onChange={(e) => { setTmdbKey(e.target.value); setTmdbTest('idle') }}
-          />
-          <button className="add-btn" onClick={saveTmdb} disabled={!tmdbKey.trim() || tmdbTest === 'testing'}>
-            {tmdbTest === 'testing' ? 'Testing…' : tmdbTest === 'ok' ? '✓ Saved' : 'Save & Test'}
-          </button>
-        </div>
-        {tmdbTest === 'ok' && <p className="integration-status ok">✓ Key verified — TMDB active.</p>}
-        {tmdbTest === 'fail' && <p className="integration-status fail">✗ {tmdbError || 'Key invalid or network error.'}</p>}
-        {tmdbTest === 'idle' && tmdbKey && localStorage.getItem('tmdb_api_key') === tmdbKey.trim() && (
-          <p className="integration-status ok">✓ TMDB active — HD metadata loads when you open a title.</p>
-        )}
-      </div>
-
-      {/* OMDb — fallback */}
-      <div className="integration-card">
-        <h3 className="integration-title">OMDb — IMDb Ratings &amp; Awards <span className="integration-badge secondary">Fallback</span></h3>
-        <p className="integration-desc">
-          IMDb ratings, awards and box office. Used as fallback when no TMDB key is set.
+          IMDb ratings, awards and box office. Supplements the built-in TMDB metadata.
           Free tier: 1,000 requests/day. Get a key at{' '}
           <a href="https://www.omdbapi.com/apikey.aspx" target="_blank" rel="noreferrer" className="integration-link">
             omdbapi.com
@@ -494,25 +442,28 @@ function AboutSettings() {
     return () => { unlisten?.() }
   }, [])
 
+  const [remoteDownloadUrl, setRemoteDownloadUrl] = useState('')
+
   const checkForUpdates = async () => {
     if (!version || updateState === 'checking') return
     setUpdateState('checking')
     setDownloadError(null)
     try {
-      const res = await fetch('https://api.github.com/repos/Goombsta/SingularityV2/releases/latest')
+      const res = await fetch('https://www.singularitytv.app/version.json')
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data = await res.json() as { tag_name: string }
-      const tag = data.tag_name.replace(/^v/, '')
-      setLatestVersion(tag)
-      setUpdateState(compareVersions(version, tag) < 0 ? 'update-available' : 'up-to-date')
+      const data = await res.json() as { android: { version: string; url: string }; desktop: { version: string; url: string } }
+      const platform = isAndroid ? data.android : data.desktop
+      setLatestVersion(platform.version)
+      setRemoteDownloadUrl(platform.url)
+      setUpdateState(compareVersions(version, platform.version) < 0 ? 'update-available' : 'up-to-date')
     } catch {
       setUpdateState('error')
     }
   }
 
-  const downloadUrl = isAndroid
+  const downloadUrl = remoteDownloadUrl || (isAndroid
     ? 'https://www.singularitytv.app/downloads/Singularitydeux.apk'
-    : 'https://www.singularitytv.app/downloads/Singularitydeux.Setup.exe'
+    : 'https://www.singularitytv.app/downloads/Singularitydeux.Setup.exe')
   const downloadFilename = isAndroid
     ? `Singularity-${latestVersion ?? 'update'}.apk`
     : `Singularity-${latestVersion ?? 'update'}-Setup.exe`

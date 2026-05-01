@@ -194,6 +194,9 @@ const QUALITY_TRAILING = /\s+(HD|FHD|4K|UHD|SD|BluRay|WEB-DL|WEBRip|DVDRip|REMUX
  *   "ES - Extraction 2(2023)"    → "Extraction 2"
  *   "EN - Extraction 2"          → "Extraction 2"
  *   "|US| Movie Title 4K"        → "Movie Title"
+ *   "Movie Title-eng"            → "Movie Title"
+ *   "Movie Title_4K"             → "Movie Title"
+ *   "Movie Title Multi"          → "Movie Title"
  */
 export function extractBaseTitle(name: string): string {
   return name
@@ -209,6 +212,12 @@ export function extractBaseTitle(name: string): string {
     .replace(/\s*\[[^\]]{1,10}\]/g, '')
     // Strip year suffix and everything after: " - 2023", " 2023"
     .replace(/\s*[-–]?\s*(19|20)\d{2}\b.*$/, '')
+    // Strip trailing hyphen/underscore + language code: -eng, _fra, -multi
+    .replace(/[-_](eng|fra|fre|spa|ger|deu|ita|por|rus|tur|ara|hin|mul|multi)$/i, '')
+    // Strip trailing hyphen/underscore + quality: -4K, _HD, -FHD
+    .replace(/[-_](4k|hd|fhd|uhd|sd)$/i, '')
+    // Strip trailing " Multi" (space-separated)
+    .replace(/\s+multi$/i, '')
     // Strip trailing quality (requires leading space — avoids stripping from position 0)
     .replace(QUALITY_TRAILING, '')
     // Strip trailing standalone region code: " EN", " FR", " US"

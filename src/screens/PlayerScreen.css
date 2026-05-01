@@ -259,9 +259,15 @@
 .ctrl-btn:active { transform: scale(0.9); }
 
 /* Skip buttons */
-.skip-btn { font-size: 14px; }
-.skip-icon { font-size: 22px; line-height: 1; display: inline-block; }
-.skip-back .skip-icon { transform: scaleX(-1); }
+.skip-btn { padding: 4px; }
+.skip-icon { width: 36px; height: 36px; display: block; }
+.play-btn { padding: 4px; }
+.play-icon { width: 36px; height: 36px; display: block; }
+
+/* CC toggle */
+.cc-btn { padding: 2px; }
+.cc-icon { width: 24px; height: 24px; display: block; }
+.cc-btn.active { color: #ffcc00; opacity: 1; }
 
 /* Tracks icon */
 .tracks-icon {

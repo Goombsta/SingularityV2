@@ -67,6 +67,7 @@ export default function LiveTvScreen() {
   const [volume, setVolume] = useState(1)
   const [showVol, setShowVol] = useState(false)
   const [showTechStats, setShowTechStats] = useState(false)
+  const [ccEnabled, setCcEnabled] = useState(false)
   const [techStats, setTechStats] = useState({
     resolution: '—', codec: '—', fps: '—', bitrate: '—',
     buffer: '—', droppedFrames: '—',
@@ -108,7 +109,9 @@ export default function LiveTvScreen() {
 
   const groups = useMemo(() => {
     const gs = Array.from(new Set(channels.map((c) => c.group_title ?? 'Other')))
-    return gs.sort()
+    const us = gs.filter((g) => /\|US\|/i.test(g)).sort()
+    const rest = gs.filter((g) => !/\|US\|/i.test(g)).sort()
+    return [...us, ...rest]
   }, [channels])
 
   // Favorites built directly from the store — works even if the current playlist failed/switched
@@ -343,6 +346,24 @@ export default function LiveTvScreen() {
     const v = videoRef.current
     if (!v) return
     v.currentTime = Math.max(0, v.currentTime + delta)
+  }
+
+  const toggleCC = () => {
+    const v = videoRef.current
+    if (!v) return
+    const next = !ccEnabled
+    setCcEnabled(next)
+    for (let i = 0; i < v.textTracks.length; i++) {
+      v.textTracks[i].mode = next ? 'showing' : 'hidden'
+    }
+    const hls = hlsRef.current
+    if (hls) {
+      if (next && hls.subtitleTrack === -1 && hls.subtitleTracks.length > 0) {
+        hls.subtitleTrack = 0
+      } else if (!next) {
+        hls.subtitleTrack = -1
+      }
+    }
   }
 
   const formatTime = (s: number) => {
@@ -616,6 +637,16 @@ export default function LiveTvScreen() {
                 </div>
 
                 <div className="livetv-ctrl-right">
+                  <button
+                    className={`livetv-ctrl-btn livetv-cc-btn ${ccEnabled ? 'active' : ''}`}
+                    onClick={toggleCC}
+                    title={ccEnabled ? 'Disable Subtitles' : 'Enable Subtitles'}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20">
+                      <rect x="1" y="4" width="22" height="16" rx="3" />
+                      <text x="12" y="15" fill="currentColor" stroke="none" fontSize="9" fontWeight="700" textAnchor="middle" fontFamily="sans-serif">CC</text>
+                    </svg>
+                  </button>
                   <button
                     className={`livetv-ctrl-btn livetv-tech-stats-btn ${showTechStats ? 'active' : ''}`}
                     onClick={() => setShowTechStats(v => !v)}

@@ -46,8 +46,6 @@ export default function HeroBanner({ items, onSelect }: HeroBannerProps) {
     if (items.length === 0) return
     const item = items[idx]
     ;(async () => {
-      const apiKey = await invoke<string | null>('get_credential', { key: 'tmdb_api_key' }).catch(() => null) || localStorage.getItem('tmdb_api_key') || ''
-      if (!apiKey) { setTmdbData(null); return }
       const cleanName = extractBaseTitle(item.name) || item.name
       const cacheKey = cleanName + (item.year?.slice(0, 4) ?? '')
       if (fetchingFor.current === cacheKey) return
@@ -61,7 +59,6 @@ export default function HeroBanner({ items, onSelect }: HeroBannerProps) {
       title: cleanName,
       year: item.year ?? null,
       mediaType: isVod ? 'movie' : 'tv',
-      apiKey,
     }).then((d) => {
       if (fetchingFor.current === cacheKey) {
         setTmdbData({ backdropUrl: d.backdropUrl, overview: d.overview, tagline: d.tagline, voteAverage: d.voteAverage, genres: d.genres, runtimeMins: d.runtimeMins, releaseDate: d.releaseDate })

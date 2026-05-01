@@ -30,6 +30,7 @@ interface PlaylistIntents {
   fetchVod: (playlistId: string) => Promise<void>
   fetchSeries: (playlistId: string) => Promise<void>
   fetchSeriesInfo: (playlistId: string, seriesId: number) => Promise<SeriesInfo>
+  enrichVodMetadata: (id: string, meta: { poster?: string; backdrop?: string }) => void
 }
 
 export const usePlaylistStore = create<PlaylistState & PlaylistIntents>((set, get) => ({
@@ -158,5 +159,13 @@ export const usePlaylistStore = create<PlaylistState & PlaylistIntents>((set, ge
 
   fetchSeriesInfo: async (playlistId, seriesId) => {
     return invoke<SeriesInfo>('fetch_series_info', { playlistId, seriesId })
+  },
+
+  enrichVodMetadata: (id, meta) => {
+    set((s) => ({
+      vods: s.vods.map((v) =>
+        v.id === id ? { ...v, poster: meta.poster || v.poster, backdrop: meta.backdrop || v.backdrop } : v
+      ),
+    }))
   },
 }))

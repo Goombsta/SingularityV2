@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 const IMG_W500: &str = "https://image.tmdb.org/t/p/w500";
 const IMG_W1280: &str = "https://image.tmdb.org/t/p/w1280";
+const TMDB_API_KEY: &str = "bef9b5ea2189caee4f6b16b2fa725a07";
 
 // ── Public output types (serialised to frontend) ─────────────────────────────
 
@@ -142,11 +143,7 @@ struct TrendingResult {
 #[tauri::command]
 pub async fn fetch_tmdb_trending(
     media_type: String,
-    api_key: String,
 ) -> Result<Vec<TmdbTrendingItem>, String> {
-    if api_key.trim().is_empty() {
-        return Err("No TMDB API key configured.".into());
-    }
     let kind = match media_type.as_str() {
         "tv" => "tv",
         "all" => "all",
@@ -155,7 +152,7 @@ pub async fn fetch_tmdb_trending(
     let url = format!(
         "https://api.themoviedb.org/3/trending/{}/week?api_key={}",
         kind,
-        api_key.trim()
+        TMDB_API_KEY
     );
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
@@ -192,11 +189,7 @@ struct SimilarResponse {
 pub async fn fetch_tmdb_similar(
     tmdb_id: u64,
     media_type: String,
-    api_key: String,
 ) -> Result<Vec<TmdbTrendingItem>, String> {
-    if api_key.trim().is_empty() {
-        return Err("No TMDB API key configured.".into());
-    }
     let kind = if media_type == "tv" { "tv" } else { "movie" };
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
@@ -205,11 +198,11 @@ pub async fn fetch_tmdb_similar(
 
     let rec_url = format!(
         "https://api.themoviedb.org/3/{}/{}/recommendations?api_key={}&language=en-US&page=1",
-        kind, tmdb_id, api_key.trim()
+        kind, tmdb_id, TMDB_API_KEY
     );
     let sim_url = format!(
         "https://api.themoviedb.org/3/{}/{}/similar?api_key={}&language=en-US&page=1",
-        kind, tmdb_id, api_key.trim()
+        kind, tmdb_id, TMDB_API_KEY
     );
 
     let (rec_resp, sim_resp) = tokio::join!(
@@ -263,12 +256,7 @@ pub async fn fetch_tmdb(
     title: String,
     year: Option<String>,
     media_type: String,
-    api_key: String,
 ) -> Result<TmdbMetadata, String> {
-    if api_key.trim().is_empty() {
-        return Err("No TMDB API key configured. Add one in Settings → Integrations.".into());
-    }
-
     let kind = if media_type == "tv" { "tv" } else { "movie" };
 
     let client = reqwest::Client::builder()
@@ -281,7 +269,7 @@ pub async fn fetch_tmdb(
     let mut search_url = format!(
         "https://api.themoviedb.org/3/search/{}?api_key={}&query={}&include_adult=false",
         kind,
-        api_key.trim(),
+        TMDB_API_KEY,
         urlencoding::encode(&title),
     );
     if let Some(y) = &year {
@@ -302,7 +290,7 @@ pub async fn fetch_tmdb(
     // ── Step 2: full details with credits + videos in one round-trip ─────────
     let details_url = format!(
         "https://api.themoviedb.org/3/{}/{}?api_key={}&append_to_response=credits,videos",
-        kind, tmdb_id, api_key.trim()
+        kind, tmdb_id, TMDB_API_KEY
     );
 
     let d: DetailsResponse = client
@@ -368,4 +356,63 @@ pub async fn fetch_tmdb(
         trailer_key,
         media_type: kind.to_string(),
     })
+}
+
+// ── Season episodes ─────────────────────────────────────────────────────────
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TmdbEpisode {
+    pub episode_number: u32,
+    pub name: String,
+    pub overview: String,
+    pub still_url: Option<String>,
+    pub vote_average: f64,
+    pub air_date: String,
+    pub runtime: Option<u64>,
+}
+
+#[derive(Deserialize)]
+struct SeasonResponse {
+    episodes: Vec<SeasonEpisode>,
+}
+
+#[derive(Deserialize)]
+struct SeasonEpisode {
+    episode_number: u64,
+    name: Option<String>,
+    overview: Option<String>,
+    still_path: Option<String>,
+    vote_average: Option<f64>,
+    air_date: Option<String>,
+    runtime: Option<u64>,
+}
+
+#[tauri::command]
+pub async fn fetch_tmdb_season(
+    tmdb_id: u64,
+    season_number: u32,
+) -> Result<Vec<TmdbEpisode>, String> {
+    let url = format!(
+        "https://api.themoviedb.org/3/tv/{}/season/{}?api_key={}",
+        tmdb_id, season_number, TMDB_API_KEY
+    );
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let resp: SeasonResponse = client
+        .get(&url)
+        .send().await.map_err(|e| e.to_string())?
+        .json().await.map_err(|e| e.to_string())?;
+
+    Ok(resp.episodes.into_iter().map(|e| TmdbEpisode {
+        episode_number: e.episode_number as u32,
+        name: e.name.unwrap_or_default(),
+        overview: e.overview.unwrap_or_default(),
+        still_url: e.still_path.filter(|p| !p.is_empty()).map(|p| format!("{}{}", IMG_W500, p)),
+        vote_average: e.vote_average.unwrap_or(0.0),
+        air_date: e.air_date.unwrap_or_default(),
+        runtime: e.runtime,
+    }).collect())
 }

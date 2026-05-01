@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { invoke } from '@tauri-apps/api/core'
 import PlaylistPicker from '../components/common/PlaylistPicker'
@@ -18,6 +18,8 @@ export default function SeriesScreen() {
   const [imdbTv, setImdbTv] = useState<string[]>([])
   const [tmdbTrendingTv, setTmdbTrendingTv] = useState<{ title: string; tmdbId?: number; releaseDate?: string }[]>([])
   const [similarTmdb, setSimilarTmdb] = useState<{ tmdbId: number; title: string; overview: string; posterUrl?: string; backdropUrl?: string; voteAverage: number; releaseDate: string }[]>([])
+  const [tmdbEpisodes, setTmdbEpisodes] = useState<Map<number, { name: string; overview: string; stillUrl?: string; runtime?: number }>>(new Map())
+  const [seriesTmdbId, setSeriesTmdbId] = useState<number | null>(null)
   const [selected, setSelected] = useState<SeriesInfo | null>(null)
   const [selectedVersions, setSelectedVersions] = useState<Array<Series & { _region: string }>>([])
   const [selectedRegion, setSelectedRegion] = useState<string>('Default')
@@ -32,17 +34,22 @@ export default function SeriesScreen() {
   }, [activePlaylistId, fetchSeries])
 
   useEffect(() => {
-    ;(async () => {
-      const tmdbKey = await invoke<string | null>('get_credential', { key: 'tmdb_api_key' }).catch(() => null) || localStorage.getItem('tmdb_api_key') || ''
-      if (tmdbKey) {
-        invoke<{ title: string }[]>('fetch_tmdb_trending', { mediaType: 'tv', apiKey: tmdbKey })
-          .then(setTmdbTrendingTv).catch(() => {})
-      } else {
-        invoke<string[]>('fetch_imdb_trending', { mediaType: 'tv' })
-          .then(setImdbTv).catch(() => {})
-      }
-    })()
+    invoke<{ title: string }[]>('fetch_tmdb_trending', { mediaType: 'tv' })
+      .then(setTmdbTrendingTv).catch(() => {})
   }, [])
+
+  // Re-fetch TMDB episodes when season changes
+  useEffect(() => {
+    if (!seriesTmdbId || !selectedSeason) return
+    setTmdbEpisodes(new Map())
+    invoke<{ episodeNumber: number; name: string; overview: string; stillUrl?: string; runtime?: number }[]>(
+      'fetch_tmdb_season', { tmdbId: seriesTmdbId, seasonNumber: Number(selectedSeason) }
+    ).then((eps) => {
+      const map = new Map<number, { name: string; overview: string; stillUrl?: string; runtime?: number }>()
+      for (const e of eps) map.set(e.episodeNumber, e)
+      setTmdbEpisodes(map)
+    }).catch(() => {})
+  }, [seriesTmdbId, selectedSeason])
 
   // Direct item passed via navigation state — no catalog lookup needed
   useEffect(() => {
@@ -172,20 +179,25 @@ export default function SeriesScreen() {
       setSelectedSeason(firstSeason)
       window.scrollTo(0, 0)
 
-      // Fetch TMDB similar in background
+      // Fetch TMDB metadata + similar + season episodes in background
       ;(async () => {
         try {
-          const tmdbKey = await invoke<string | null>('get_credential', { key: 'tmdb_api_key' }).catch(() => null) || localStorage.getItem('tmdb_api_key') || ''
-          if (!tmdbKey) return
           const cleanName = extractBaseTitle(info.series.name) || info.series.name
           const meta = await invoke<{ tmdbId: number }>('fetch_tmdb', {
-            title: cleanName, year: info.series.year ?? null, mediaType: 'tv', apiKey: tmdbKey,
+            title: cleanName, year: info.series.year ?? null, mediaType: 'tv',
           })
-          const sim = await invoke<typeof similarTmdb>('fetch_tmdb_similar', {
-            tmdbId: meta.tmdbId, mediaType: 'tv', apiKey: tmdbKey,
-          })
-          setSimilarTmdb(sim)
-        } catch { /* no TMDB key or title not found — similar stays empty */ }
+          setSeriesTmdbId(meta.tmdbId)
+          invoke<typeof similarTmdb>('fetch_tmdb_similar', {
+            tmdbId: meta.tmdbId, mediaType: 'tv',
+          }).then(setSimilarTmdb).catch(() => {})
+          invoke<{ episodeNumber: number; name: string; overview: string; stillUrl?: string; runtime?: number }[]>(
+            'fetch_tmdb_season', { tmdbId: meta.tmdbId, seasonNumber: Number(firstSeason) }
+          ).then((eps) => {
+            const map = new Map<number, { name: string; overview: string; stillUrl?: string; runtime?: number }>()
+            for (const e of eps) map.set(e.episodeNumber, e)
+            setTmdbEpisodes(map)
+          }).catch(() => {})
+        } catch { /* title not found */ }
       })()
     } finally {
       setLoadingInfo(false)
@@ -199,7 +211,7 @@ export default function SeriesScreen() {
         title: `${selected?.series.name} S${ep.season}E${ep.episode_num}`,
         live: false,
         resumeKey: `playlist:${selected?.series.playlist_id}:series:${selected?.series.id}:episode:${ep.id}`,
-        posterUrl: ep.poster ?? selected?.series.poster,
+        posterUrl: selected?.series.poster ?? ep.poster,
         seriesSeasons: selected?.seasons,
         currentEpisodeId: ep.id,
         seriesName: selected?.series.name,
@@ -209,6 +221,34 @@ export default function SeriesScreen() {
       },
     })
   }
+
+  // ── Episode carousel drag-to-scroll ────────────────────────────────────────
+  const epListRef = useRef<HTMLDivElement>(null)
+  const dragState = useRef({ down: false, startX: 0, scrollLeft: 0, moved: false })
+
+  const onMouseDown = useCallback((e: React.MouseEvent) => {
+    const el = epListRef.current
+    if (!el) return
+    dragState.current = { down: true, startX: e.pageX - el.offsetLeft, scrollLeft: el.scrollLeft, moved: false }
+    el.style.cursor = 'grabbing'
+  }, [])
+
+  const onMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!dragState.current.down) return
+    e.preventDefault()
+    const el = epListRef.current
+    if (!el) return
+    const x = e.pageX - el.offsetLeft
+    const walk = x - dragState.current.startX
+    if (Math.abs(walk) > 3) dragState.current.moved = true
+    el.scrollLeft = dragState.current.scrollLeft - walk
+  }, [])
+
+  const onMouseUp = useCallback(() => {
+    dragState.current.down = false
+    const el = epListRef.current
+    if (el) el.style.cursor = 'grab'
+  }, [])
 
   // ── Detail view ──────────────────────────────────────────────────────────────
   if (selected) {
@@ -238,6 +278,9 @@ export default function SeriesScreen() {
               navigate(-1)
             } else {
               setSelected(null)
+              setSeriesTmdbId(null)
+              setTmdbEpisodes(new Map())
+              setSimilarTmdb([])
             }
           }}>← Back</button>
 
@@ -290,23 +333,38 @@ export default function SeriesScreen() {
 
           <div className="detail-episodes-section">
             <h3 className="detail-section-title">Episodes — Season {selectedSeason}</h3>
-            <div className="episode-list">
-              {episodes.map((ep) => (
-                <div key={ep.id} className="episode-item" onClick={() => playEpisode(ep)}>
-                  {ep.poster
-                    ? <img src={ep.poster} alt="" className="ep-thumb" />
-                    : <div className="ep-thumb-placeholder">E{ep.episode_num}</div>
-                  }
-                  <div className="ep-info">
-                    <span className="ep-num">E{ep.episode_num}</span>
-                    <div>
-                      <p className="ep-title">{ep.title}</p>
-                      {ep.plot && <p className="ep-plot">{ep.plot.slice(0, 120)}…</p>}
+            <div
+              className="episode-list"
+              ref={epListRef}
+              onMouseDown={onMouseDown}
+              onMouseMove={onMouseMove}
+              onMouseUp={onMouseUp}
+              onMouseLeave={onMouseUp}
+            >
+              {episodes.map((ep) => {
+                const tmdbEp = tmdbEpisodes.get(ep.episode_num)
+                const thumb = tmdbEp?.stillUrl || ep.poster
+                const title = tmdbEp?.name || ep.title
+                const overview = tmdbEp?.overview || ep.plot
+                const runtime = tmdbEp?.runtime ?? (ep.duration ? Math.round(ep.duration / 60) : undefined)
+                return (
+                  <div key={ep.id} className="episode-card" onClick={() => { if (!dragState.current.moved) playEpisode(ep) }}>
+                    <div className="ep-card-thumb-wrap">
+                      {thumb
+                        ? <img src={thumb} alt="" className="ep-card-thumb" />
+                        : <div className="ep-card-thumb-placeholder">E{ep.episode_num}</div>
+                      }
+                      <span className="ep-card-badge">E{ep.episode_num}</span>
+                      <div className="ep-card-play">▶ Play</div>
+                    </div>
+                    <div className="ep-card-body">
+                      <p className="ep-card-title">{title}</p>
+                      {overview && <p className="ep-card-overview">{overview}</p>}
+                      {runtime && <span className="ep-card-runtime">{runtime} min</span>}
                     </div>
                   </div>
-                  <button className="ep-play">▶</button>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
 

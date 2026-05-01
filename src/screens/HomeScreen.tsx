@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { useNavigate } from 'react-router-dom'
 import HeroBanner from '../components/common/HeroBanner'
@@ -113,23 +113,32 @@ export default function HomeScreen() {
     return () => document.removeEventListener('visibilitychange', onVisibility)
   }, [loadResumeEntries])
 
-  // Fetch trending: TMDB if key present, else IMDb RSS fallback
+  // Fetch trending from TMDB
   useEffect(() => {
-    ;(async () => {
-      const tmdbKey = await invoke<string | null>('get_credential', { key: 'tmdb_api_key' }).catch(() => null) || localStorage.getItem('tmdb_api_key') || ''
-      if (tmdbKey) {
-        invoke<TmdbTrendingItem[]>('fetch_tmdb_trending', { mediaType: 'movie', apiKey: tmdbKey })
-          .then(setTmdbTrendingMovies).catch(() => {})
-        invoke<TmdbTrendingItem[]>('fetch_tmdb_trending', { mediaType: 'tv', apiKey: tmdbKey })
-          .then(setTmdbTrendingTv).catch(() => {})
-      } else {
-        invoke<string[]>('fetch_imdb_trending', { mediaType: 'movie' })
-          .then(setImdbMovies).catch(() => {})
-        invoke<string[]>('fetch_imdb_trending', { mediaType: 'tv' })
-          .then(setImdbTv).catch(() => {})
-      }
-    })()
+    invoke<TmdbTrendingItem[]>('fetch_tmdb_trending', { mediaType: 'movie' })
+      .then(setTmdbTrendingMovies).catch(() => {})
+    invoke<TmdbTrendingItem[]>('fetch_tmdb_trending', { mediaType: 'tv' })
+      .then(setTmdbTrendingTv).catch(() => {})
   }, [])
+
+  // Enrich Continue Watching entries with TMDB poster art
+  const [cwTmdbPosters, setCwTmdbPosters] = useState<Record<string, string>>({})
+  const cwFetchedRef = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    for (const entry of resumeEntries.slice(0, 20)) {
+      if (cwFetchedRef.current.has(entry.key)) continue
+      const catalogPoster = resolveEntryPoster(entry.key, vods, series)
+      if (catalogPoster) continue
+      cwFetchedRef.current.add(entry.key)
+      const cleanTitle = extractBaseTitle(entry.title) || entry.title
+      const isTV = entry.key.includes(':series:')
+      invoke<{ posterUrl?: string }>('fetch_tmdb', {
+        title: cleanTitle, year: null, mediaType: isTV ? 'tv' : 'movie',
+      }).then((meta) => {
+        if (meta.posterUrl) setCwTmdbPosters((prev) => ({ ...prev, [entry.key]: meta.posterUrl! }))
+      }).catch(() => {})
+    }
+  }, [resumeEntries, vods, series])
 
   // Trending: prefer TMDB weekly trending, fall back to IMDb RSS match.
   // When TMDB data is available, enrich matched items with TMDB poster/backdrop
@@ -312,14 +321,14 @@ export default function HomeScreen() {
               <ContinueWatchingCard
                 key={entry.key}
                 entry={entry}
-                posterUrl={entry.poster_url ?? resolveEntryPoster(entry.key, vods, series)}
+                posterUrl={resolveEntryPoster(entry.key, vods, series) ?? cwTmdbPosters[entry.key] ?? entry.poster_url}
                 onClick={() => navigate('/player', {
                   state: {
                     url: entry.stream_url,
                     title: entry.title,
                     live: false,
                     resumeKey: entry.key,
-                    posterUrl: entry.poster_url ?? resolveEntryPoster(entry.key, vods, series),
+                    posterUrl: resolveEntryPoster(entry.key, vods, series) ?? cwTmdbPosters[entry.key] ?? entry.poster_url,
                   },
                 })}
                 onDismiss={(e) => { e.stopPropagation(); clearEntry(entry.key) }}

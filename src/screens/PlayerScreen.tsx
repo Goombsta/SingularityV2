@@ -728,10 +728,22 @@ export default function PlayerScreen() {
     resetControlsTimer()
   }
 
+  const lastSubIdRef = useRef(0)
+
   const selectSubTrack = (id: number) => {
+    if (id !== 0) lastSubIdRef.current = id
     setSelectedSubId(id)
     playerCmd('mpv_set_sub_track', { playerId: playerIdRef.current, trackId: id }).catch(() => {})
     resetControlsTimer()
+  }
+
+  const toggleCC = () => {
+    if (selectedSubId !== 0) {
+      selectSubTrack(0)
+    } else {
+      const target = lastSubIdRef.current || subtitleTracks[0]?.id || 0
+      if (target) selectSubTrack(target)
+    }
   }
 
   const selectAudioTrack = (id: number) => {
@@ -1048,19 +1060,44 @@ export default function PlayerScreen() {
 
           {/* Center: skip-back | play | skip-fwd */}
           <div className="controls-center">
-            <button className="ctrl-btn skip-btn skip-back" onClick={() => skip(-10)} title="Back 10s">
-              <span className="skip-icon">⟲</span>
+            <button className="ctrl-btn skip-btn" onClick={() => skip(-10)} title="Back 10s">
+              <svg className="skip-icon" viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M15 3 9.5 7.5 15 12" />
+                <path d="M9.5 7.5a10 10 0 1 1-2.1 5.5" />
+                <text x="16" y="19.5" fill="currentColor" stroke="none" fontSize="8.5" fontWeight="700" textAnchor="middle" fontFamily="sans-serif">10</text>
+              </svg>
             </button>
-            <button className="ctrl-btn" onClick={togglePlay} title={paused ? 'Play' : 'Pause'}>
-              {paused ? '▶' : '⏸'}
+            <button className="ctrl-btn play-btn" onClick={togglePlay} title={paused ? 'Play' : 'Pause'}>
+              <svg className="play-icon" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                {paused
+                  ? <polygon points="6,3 20,12 6,21" />
+                  : <><rect x="5" y="3" width="4" height="18" rx="1" /><rect x="15" y="3" width="4" height="18" rx="1" /></>}
+              </svg>
             </button>
-            <button className="ctrl-btn skip-btn skip-fwd" onClick={() => skip(10)} title="Forward 10s">
-              <span className="skip-icon">⟲</span>
+            <button className="ctrl-btn skip-btn" onClick={() => skip(10)} title="Forward 10s">
+              <svg className="skip-icon" viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M17 3 22.5 7.5 17 12" />
+                <path d="M22.5 7.5a10 10 0 1 0 2.1 5.5" />
+                <text x="16" y="19.5" fill="currentColor" stroke="none" fontSize="8.5" fontWeight="700" textAnchor="middle" fontFamily="sans-serif">10</text>
+              </svg>
             </button>
           </div>
 
-          {/* Right: tech stats + tracks panel + fullscreen */}
+          {/* Right: CC + tech stats + tracks panel + fullscreen */}
           <div className="controls-right">
+            {/* CC toggle — LiveTV only */}
+            {state?.live !== false && (
+              <button
+                className={`ctrl-btn cc-btn ${selectedSubId !== 0 ? 'active' : ''}`}
+                onClick={(e) => { e.stopPropagation(); toggleCC() }}
+                title={selectedSubId !== 0 ? 'Disable Subtitles' : 'Enable Subtitles'}
+              >
+                <svg className="cc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="1" y="4" width="22" height="16" rx="3" />
+                  <text x="12" y="15" fill="currentColor" stroke="none" fontSize="9" fontWeight="700" textAnchor="middle" fontFamily="sans-serif">CC</text>
+                </svg>
+              </button>
+            )}
             {/* Tech Stats toggle */}
             <button
               className={`ctrl-btn tech-stats-btn ${showTechStats ? 'active' : ''}`}
