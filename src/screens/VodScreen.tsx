@@ -48,7 +48,6 @@ export default function VodScreen() {
   const [tmdb, setTmdb] = useState<TmdbMeta | null>(null)
   const [omdb, setOmdb] = useState<OmdbMeta | null>(null)
   const [similarTmdb, setSimilarTmdb] = useState<TmdbTrendingItem[]>([])
-  const [imdbMovies, setImdbMovies] = useState<string[]>([])
   const [tmdbTrendingMovies, setTmdbTrendingMovies] = useState<TmdbTrendingItem[]>([])
 
   useEffect(() => {
@@ -168,24 +167,8 @@ export default function VodScreen() {
         cat === 'Trending Now' ? [cat, trending] as [typeof cat, typeof items] : [cat, items] as [typeof cat, typeof items]
       )
     }
-    if (imdbMovies.length > 0) {
-      const used = new Set<string>()
-      const trending: typeof vods = []
-      for (const trendTitle of imdbMovies) {
-        const t = (extractBaseTitle(trendTitle) || trendTitle).toLowerCase()
-        const match = vods.find((v) => {
-          if (used.has(v.id)) return false
-          const n = (extractBaseTitle(v.name) || v.name).toLowerCase()
-          return matchesTrendingTitle(n, t)
-        })
-        if (match) { used.add(match.id); trending.push(match) }
-      }
-      return byGenre.map(([cat, items]) =>
-        cat === 'Trending Now' ? [cat, trending] as [typeof cat, typeof items] : [cat, items] as [typeof cat, typeof items]
-      )
-    }
     return byGenre
-  }, [byGenre, vods, tmdbTrendingMovies, imdbMovies])
+  }, [byGenre, vods, tmdbTrendingMovies])
 
   // ── Category grid (See All) — must be before any early return ─────────────
   const categoryItems = useMemo(() => {

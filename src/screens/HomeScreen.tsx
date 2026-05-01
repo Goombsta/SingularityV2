@@ -94,8 +94,6 @@ export default function HomeScreen() {
   const { favorites } = useUiStore()
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<HomeTab>('movies')
-  const [imdbMovies, setImdbMovies] = useState<string[]>([])
-  const [imdbTv, setImdbTv] = useState<string[]>([])
   const [tmdbTrendingMovies, setTmdbTrendingMovies] = useState<TmdbTrendingItem[]>([])
   const [tmdbTrendingTv, setTmdbTrendingTv] = useState<TmdbTrendingItem[]>([])
 
@@ -185,23 +183,8 @@ export default function HomeScreen() {
       }
       return result
     }
-    // IMDb RSS fallback
-    if (imdbMovies.length > 0) {
-      const used = new Set<string>()
-      const result: VodItem[] = []
-      for (const trendTitle of imdbMovies) {
-        const t = (extractBaseTitle(trendTitle) || trendTitle).toLowerCase()
-        const match = vods.find((v) => {
-          if (used.has(v.id)) return false
-          const n = (extractBaseTitle(v.name) || v.name).toLowerCase()
-          return matchesTrendingTitle(n, t)
-        })
-        if (match) { used.add(match.id); result.push(match) }
-      }
-      return result
-    }
     return [...vods].sort((a, b) => parseFloat(b.rating || '0') - parseFloat(a.rating || '0')).slice(0, 30)
-  }, [vods, tmdbTrendingMovies, imdbMovies])
+  }, [vods, tmdbTrendingMovies])
 
   const trendingSeries = useMemo(() => {
     if (tmdbTrendingTv.length > 0) {
@@ -242,22 +225,8 @@ export default function HomeScreen() {
       }
       return result
     }
-    if (imdbTv.length > 0) {
-      const used = new Set<string>()
-      const result: Series[] = []
-      for (const trendTitle of imdbTv) {
-        const t = (extractBaseTitle(trendTitle) || trendTitle).toLowerCase()
-        const match = series.find((s) => {
-          if (used.has(s.id)) return false
-          const n = (extractBaseTitle(s.name) || s.name).toLowerCase()
-          return matchesTrendingTitle(n, t)
-        })
-        if (match) { used.add(match.id); result.push(match) }
-      }
-      return result
-    }
     return [...series].sort((a, b) => parseFloat(b.rating || '0') - parseFloat(a.rating || '0')).slice(0, 30)
-  }, [series, tmdbTrendingTv, imdbTv])
+  }, [series, tmdbTrendingTv])
 
   // Hero items: first 5 from Trending Now — TMDB will supply HD backdrops for each
   const heroItems = useMemo(() => {

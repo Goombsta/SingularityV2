@@ -9,5 +9,10 @@
     "version": "0.5.7",
     "url": "https://www.singularitytv.app/downloads/Singularitydeux.Setup.exe",
     "notes": ""
+  },
+  "smarttv": {
+    "version": "0.1.4",
+    "url": "https://www.singularitytv.app/downloads/SingularityTV.apk",
+    "notes": ""
   }
 }

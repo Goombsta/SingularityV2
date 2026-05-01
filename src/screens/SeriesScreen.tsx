@@ -15,7 +15,6 @@ export default function SeriesScreen() {
   const { activePlaylistId, series, fetchSeries, fetchSeriesInfo, status } = usePlaylistStore()
   const { addFavorite, removeFavorite, isFavorite } = useUiStore()
   const [search, setSearch] = useState('')
-  const [imdbTv, setImdbTv] = useState<string[]>([])
   const [tmdbTrendingTv, setTmdbTrendingTv] = useState<{ title: string; tmdbId?: number; releaseDate?: string }[]>([])
   const [similarTmdb, setSimilarTmdb] = useState<{ tmdbId: number; title: string; overview: string; posterUrl?: string; backdropUrl?: string; voteAverage: number; releaseDate: string }[]>([])
   const [tmdbEpisodes, setTmdbEpisodes] = useState<Map<number, { name: string; overview: string; stillUrl?: string; runtime?: number }>>(new Map())
@@ -103,24 +102,8 @@ export default function SeriesScreen() {
         cat === 'Trending Now' ? [cat, trending] as [typeof cat, typeof items] : [cat, items] as [typeof cat, typeof items]
       )
     }
-    if (imdbTv.length > 0) {
-      const used = new Set<string>()
-      const trending: typeof series = []
-      for (const trendTitle of imdbTv) {
-        const t = (extractBaseTitle(trendTitle) || trendTitle).toLowerCase()
-        const match = series.find((s) => {
-          if (used.has(s.id)) return false
-          const n = (extractBaseTitle(s.name) || s.name).toLowerCase()
-          return matchesTrendingTitle(n, t)
-        })
-        if (match) { used.add(match.id); trending.push(match) }
-      }
-      return byGenre.map(([cat, items]) =>
-        cat === 'Trending Now' ? [cat, trending] as [typeof cat, typeof items] : [cat, items] as [typeof cat, typeof items]
-      )
-    }
     return byGenre
-  }, [byGenre, series, tmdbTrendingTv, imdbTv])
+  }, [byGenre, series, tmdbTrendingTv])
 
   const similar = useMemo(() => {
     if (!selected) return []
