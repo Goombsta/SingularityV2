@@ -16,10 +16,22 @@ val tauriProperties = Properties().apply {
 android {
     signingConfigs {
         create("release") {
-            storeFile = file("C:/All Code/apk key/Singularitydeux/Singularitydeux")
-            storePassword = "Flam3boy!!"
-            keyAlias = "singularitydeux"
-            keyPassword = "Flam3boy!!"
+            val kPath = System.getenv("KEYSTORE_PATH")
+                ?: System.getenv("TAURI_ANDROID_KEYSTORE_PATH")
+                ?: "C:/All Code/apk key/Singularitydeux/Singularitydeux"
+            val kPass = System.getenv("ANDROID_STORE_PASSWORD")
+                ?: System.getenv("TAURI_ANDROID_KEYSTORE_PASSWORD")
+                ?: "Flam3boy!!"
+            val kAlias = System.getenv("ANDROID_KEY_ALIAS")
+                ?: System.getenv("TAURI_ANDROID_KEY_ALIAS")
+                ?: "singularitydeux"
+            val kKeyPass = System.getenv("ANDROID_KEY_PASSWORD")
+                ?: System.getenv("TAURI_ANDROID_KEY_PASSWORD")
+                ?: "Flam3boy!!"
+            storeFile = file(kPath)
+            storePassword = kPass
+            keyAlias = kAlias
+            keyPassword = kKeyPass
         }
     }
     compileSdk = 36

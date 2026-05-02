@@ -295,6 +295,10 @@ jobs:
         run: npm run tauri android build -- --apk
         env:
           NDK_HOME: ${{ env.NDK_HOME }}
+          KEYSTORE_PATH: ${{ env.KEYSTORE_PATH }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
       - name: Collect and verify APK
         run: |
