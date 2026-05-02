@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { getVersion } from '@tauri-apps/api/app'
-import { listen, type UnlistenFn } from '@tauri-apps/api/event'
-import { platform } from '@tauri-apps/plugin-os'
+import { useUpdate } from '../hooks/useUpdate'
 import { usePlaylistStore } from '../store/slices/playlistSlice'
 import { useEpgStore } from '../store/slices/epgSlice'
 import type { Playlist } from '../types'
@@ -402,108 +400,8 @@ function IntegrationsSettings() {
   )
 }
 
-type UpdateState = 'idle' | 'checking' | 'up-to-date' | 'update-available' | 'downloading' | 'downloaded' | 'download-error' | 'install-permission' | 'error'
-
-function formatProgress(p: { downloaded: number; total: number | null }): string {
-  const mb = (n: number) => (n / (1024 * 1024)).toFixed(1)
-  if (p.total) return `${mb(p.downloaded)} / ${mb(p.total)} MB`
-  if (p.downloaded > 0) return `${mb(p.downloaded)} MB`
-  return ''
-}
-
-function compareVersions(a: string, b: string): number {
-  const pa = a.split('.').map(Number)
-  const pb = b.split('.').map(Number)
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-    const diff = (pa[i] || 0) - (pb[i] || 0)
-    if (diff !== 0) return diff
-  }
-  return 0
-}
-
 function AboutSettings() {
-  const [version, setVersion] = useState<string | null>(null)
-  const [updateState, setUpdateState] = useState<UpdateState>('idle')
-  const [latestVersion, setLatestVersion] = useState<string | null>(null)
-  const [downloadedPath, setDownloadedPath] = useState<string | null>(null)
-  const [downloadError, setDownloadError] = useState<string | null>(null)
-  const [progress, setProgress] = useState<{ downloaded: number; total: number | null }>({ downloaded: 0, total: null })
-  const [isAndroid] = useState(() => { try { return platform() === 'android' } catch { return false } })
-
-  useEffect(() => {
-    getVersion().then(setVersion).catch(() => setVersion(null))
-  }, [])
-
-  useEffect(() => {
-    let unlisten: UnlistenFn | undefined
-    listen<{ downloaded: number; total: number | null }>('update-download-progress', (ev) => {
-      setProgress({ downloaded: ev.payload.downloaded, total: ev.payload.total ?? null })
-    }).then((fn) => { unlisten = fn })
-    return () => { unlisten?.() }
-  }, [])
-
-  const [remoteDownloadUrl, setRemoteDownloadUrl] = useState('')
-
-  const checkForUpdates = async () => {
-    if (!version || updateState === 'checking') return
-    setUpdateState('checking')
-    setDownloadError(null)
-    try {
-      const res = await fetch('https://www.singularitytv.app/version.json')
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data = await res.json() as { android: { version: string; url: string }; desktop: { version: string; url: string } }
-      const platform = isAndroid ? data.android : data.desktop
-      setLatestVersion(platform.version)
-      setRemoteDownloadUrl(platform.url)
-      setUpdateState(compareVersions(version, platform.version) < 0 ? 'update-available' : 'up-to-date')
-    } catch {
-      setUpdateState('error')
-    }
-  }
-
-  const downloadUrl = remoteDownloadUrl || (isAndroid
-    ? 'https://www.singularitytv.app/downloads/Singularitydeux.apk'
-    : 'https://www.singularitytv.app/downloads/Singularitydeux.Setup.exe')
-  const downloadFilename = isAndroid
-    ? `Singularity-${latestVersion ?? 'update'}.apk`
-    : `Singularity-${latestVersion ?? 'update'}-Setup.exe`
-
-  const downloadUpdate = async () => {
-    if (updateState === 'downloading') return
-    setUpdateState('downloading')
-    setDownloadError(null)
-    setProgress({ downloaded: 0, total: null })
-    try {
-      const path = await invoke<string>('download_update', {
-        url: downloadUrl,
-        filename: downloadFilename,
-      })
-      setDownloadedPath(path)
-      setUpdateState('downloaded')
-    } catch (e) {
-      setDownloadError(typeof e === 'string' ? e : (e as any)?.message ?? JSON.stringify(e))
-      setUpdateState('download-error')
-    }
-  }
-
-  const installUpdate = async () => {
-    if (!downloadedPath) return
-    setDownloadError(null)
-    try {
-      if (isAndroid) {
-        const res = await invoke<{ needsPermission?: boolean } | null>('plugin:updater|install_apk', { path: downloadedPath })
-        if (res?.needsPermission) {
-          setUpdateState('install-permission')
-          return
-        }
-      } else {
-        await invoke('install_update', { path: downloadedPath })
-      }
-    } catch (e) {
-      setDownloadError(typeof e === 'string' ? e : (e as any)?.message ?? JSON.stringify(e))
-      setUpdateState('download-error')
-    }
-  }
+  const { updateState, version, latestVersion, progress, downloadError, checkForUpdates, downloadUpdate, installUpdate, formatProgress } = useUpdate()
 
   return (
     <div className="settings-section">
@@ -539,7 +437,7 @@ function AboutSettings() {
               {updateState === 'downloading' ? (
                 <>
                   <button className="about-download-btn checking" disabled>
-                    <span className="about-spinner" />Downloading… {formatProgress(progress)}
+                    <span className="about-spinner" />Downloading… {formatProgress()}
                   </button>
                   <div className="about-progress-track">
                     {progress.total ? (

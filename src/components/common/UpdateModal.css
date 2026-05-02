@@ -1,0 +1,131 @@
+.update-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: update-modal-fade-in 200ms ease;
+}
+
+.update-modal-card {
+  background: var(--bg-card);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-lg);
+  padding: 32px;
+  max-width: 400px;
+  width: 90%;
+  animation: update-modal-scale-in 200ms ease;
+}
+
+.update-modal-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 24px;
+}
+
+.update-modal-version {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.update-modal-progress {
+  margin-bottom: 24px;
+}
+
+.update-modal-progress-track {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.update-modal-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 300ms ease;
+}
+
+.update-modal-progress-indeterminate {
+  height: 100%;
+  width: 40%;
+  background: var(--accent);
+  border-radius: 3px;
+  animation: update-modal-slide 1.2s ease-in-out infinite;
+}
+
+.update-modal-progress-text {
+  margin: 8px 0 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.update-modal-error {
+  color: #ef4444;
+  font-size: 0.85rem;
+  margin: 0 0 16px;
+}
+
+.update-modal-permission {
+  color: var(--accent);
+  font-size: 0.85rem;
+  margin: 0 0 16px;
+  line-height: 1.4;
+}
+
+.update-modal-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.update-modal-btn {
+  flex: 1;
+  padding: 10px 20px;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity var(--transition), background var(--transition);
+}
+
+.update-modal-btn.primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.update-modal-btn.primary:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.update-modal-btn.primary:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.update-modal-btn.secondary {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
+}
+
+.update-modal-btn.secondary:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+@keyframes update-modal-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes update-modal-scale-in {
+  from { transform: scale(0.96); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+@keyframes update-modal-slide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}

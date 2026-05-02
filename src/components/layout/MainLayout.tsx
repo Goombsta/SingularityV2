@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Outlet, useNavigate } from 'react-router-dom'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { platform } from '@tauri-apps/plugin-os'
@@ -6,6 +6,8 @@ import { usePlaylistStore } from '../../store/slices/playlistSlice'
 import { useUiStore } from '../../store/slices/uiSlice'
 import { useEpgStore } from '../../store/slices/epgSlice'
 import { exportCategoriesToCsv } from '../../utils/exportCsv'
+import { useUpdate } from '../../hooks/useUpdate'
+import UpdateModal from '../common/UpdateModal'
 import Sidebar from './Sidebar'
 import './MainLayout.css'
 
@@ -37,6 +39,9 @@ export default function MainLayout() {
   const mountTime = useState(() => Date.now())[0]
   const [exportPct, setExportPct] = useState<number | null>(null)
   const isAndroidPlatform = getIsAndroid()
+  const update = useUpdate()
+  const [showUpdateModal, setShowUpdateModal] = useState(false)
+  const startupCheckDone = useRef(false)
 
   useEffect(() => {
     loadPlaylists()
@@ -83,6 +88,24 @@ export default function MainLayout() {
     return () => clearTimeout(t)
   }, [playlistsLoaded, mountTime, isAndroidPlatform])
 
+  useEffect(() => {
+    if (!splashGone || !update.version || startupCheckDone.current) return
+    startupCheckDone.current = true
+    update.checkForUpdates()
+  }, [splashGone, update.version])
+
+  useEffect(() => {
+    if (update.updateState === 'update-available') {
+      setShowUpdateModal(true)
+    }
+  }, [update.updateState])
+
+  useEffect(() => {
+    if (update.updateState === 'downloaded' && showUpdateModal) {
+      update.installUpdate()
+    }
+  }, [update.updateState, showUpdateModal])
+
   return (
     <div className="app-shell">
       {!splashGone && (
@@ -128,6 +151,17 @@ export default function MainLayout() {
           <Outlet />
         </div>
       </div>
+      {showUpdateModal && update.latestVersion && (
+        <UpdateModal
+          latestVersion={update.latestVersion}
+          updateState={update.updateState}
+          progress={update.progress}
+          downloadError={update.downloadError}
+          onUpdate={() => update.downloadUpdate()}
+          onClose={() => { setShowUpdateModal(false); update.dismiss() }}
+          formatProgress={update.formatProgress}
+        />
+      )}
     </div>
   )
 }

@@ -1,5 +1,5 @@
 use futures_util::StreamExt;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::Emitter;
 #[cfg(target_os = "android")]
 use tauri::Manager;
@@ -9,6 +9,42 @@ use tokio::io::AsyncWriteExt;
 struct DownloadProgress {
     downloaded: u64,
     total: Option<u64>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct VersionEntry {
+    pub version: String,
+    pub url: String,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct VersionInfo {
+    pub android: VersionEntry,
+    pub desktop: VersionEntry,
+}
+
+#[tauri::command]
+pub async fn fetch_version_info() -> Result<VersionInfo, String> {
+    let client = reqwest::Client::builder()
+        .user_agent("Singularity-Updater/1.0")
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let res = client
+        .get("https://www.singularitytv.app/version.json")
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?;
+
+    if !res.status().is_success() {
+        return Err(format!("HTTP {}", res.status()));
+    }
+
+    res.json::<VersionInfo>()
+        .await
+        .map_err(|e| format!("Parse failed: {e}"))
 }
 
 macro_rules! ulog {
