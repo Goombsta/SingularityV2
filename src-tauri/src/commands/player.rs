@@ -320,6 +320,7 @@ mod windows_impl {
         // If the output device doesn't support the codec, the result is silence.
         // Forcing software decode produces audio on any output device.
         let _ = mpv_set_str(ctx, "audio-spdif", "");
+        let _ = mpv_set_str(ctx, "audio-client-name", "Singularity");
         let _ = mpv_set_str(ctx, "volume-max", "150");
         let _ = mpv_set_str(ctx, "network-timeout", "30");
         let _ = mpv_set_str(ctx, "cache", "yes");
