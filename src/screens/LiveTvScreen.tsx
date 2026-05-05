@@ -1,10 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { invoke } from '@tauri-apps/api/core'
+import { platform } from '@tauri-apps/plugin-os'
 import Hls from 'hls.js'
 import mpegts from 'mpegts.js'
 
 const FAVORITES = '__favorites__'
+
+let _ltvPlatform: string | null = null
+function getLtvPlatform(): string {
+  if (_ltvPlatform === null) {
+    try { _ltvPlatform = platform() } catch { _ltvPlatform = 'unknown' }
+  }
+  return _ltvPlatform
+}
+const LTV_VOLUME_MAX = getLtvPlatform() === 'windows' ? 1.5 : 1.0
 
 // Proxy loader for HLS.js — rewrites fragment URLs through the local Rust proxy
 // so CDNs never see browser Origin/Referer headers. Only used for explicit .m3u8 URLs.
@@ -61,10 +71,14 @@ export default function LiveTvScreen() {
   const hlsRef = useRef<Hls | null>(null)
   const mpegtsRef = useRef<mpegts.Player | null>(null)
   const proxyPortRef = useRef<number | null>(null)
+  const audioCtxRef = useRef<AudioContext | null>(null)
+  const gainNodeRef = useRef<GainNode | null>(null)
+  const audioSrcRef = useRef<MediaElementAudioSourceNode | null>(null)
   const [paused, setPaused] = useState(false)
   const [position, setPosition] = useState(0)
   const [duration, setDuration] = useState(0)
   const [volume, setVolume] = useState(1)
+  const [muted, setMuted] = useState(false)
   const [showVol, setShowVol] = useState(false)
   const [showTechStats, setShowTechStats] = useState(false)
   const [ccEnabled, setCcEnabled] = useState(false)
@@ -73,6 +87,37 @@ export default function LiveTvScreen() {
     buffer: '—', droppedFrames: '—',
     audioCodec: '—', audioChannels: '—',
   })
+
+  // Windows-only: route video audio through Web Audio API for >100% volume boost.
+  // HTML5 video.volume is hard-capped at 1.0; GainNode lifts that cap.
+  useEffect(() => {
+    if (LTV_VOLUME_MAX <= 1.0) return
+    const video = videoRef.current
+    if (!video) return
+    try {
+      const ctx = new AudioContext()
+      const src = ctx.createMediaElementSource(video)
+      const gain = ctx.createGain()
+      gain.gain.value = volume
+      src.connect(gain)
+      gain.connect(ctx.destination)
+      audioCtxRef.current = ctx
+      audioSrcRef.current = src
+      gainNodeRef.current = gain
+      video.volume = 1.0
+    } catch (err) {
+      console.warn('[LiveTV] Web Audio setup failed, falling back to native volume', err)
+    }
+    return () => {
+      try { audioSrcRef.current?.disconnect() } catch {}
+      try { gainNodeRef.current?.disconnect() } catch {}
+      try { audioCtxRef.current?.close() } catch {}
+      audioCtxRef.current = null
+      audioSrcRef.current = null
+      gainNodeRef.current = null
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Poll tech stats when panel is open
   useEffect(() => {
@@ -612,20 +657,37 @@ export default function LiveTvScreen() {
                   {/* Volume */}
                   <div className="livetv-vol-wrap" onMouseEnter={() => setShowVol(true)} onMouseLeave={() => setShowVol(false)}>
                     <button className="livetv-ctrl-btn" onClick={() => {
-                      if (videoRef.current) videoRef.current.muted = !videoRef.current.muted
+                      const next = !muted
+                      setMuted(next)
+                      if (gainNodeRef.current) {
+                        gainNodeRef.current.gain.value = next ? 0 : volume
+                      } else if (videoRef.current) {
+                        videoRef.current.muted = next
+                      }
                     }}>
                       <VolumeIcon />
                     </button>
                     {showVol && (
                       <input
                         type="range" className="livetv-vol-slider"
-                        min={0} max={1} step={0.05} value={volume}
+                        min={0} max={LTV_VOLUME_MAX} step={0.05} value={volume}
                         onChange={(e) => {
                           const v = Number(e.target.value)
                           setVolume(v)
-                          if (videoRef.current) videoRef.current.volume = v
+                          if (muted) setMuted(false)
+                          if (gainNodeRef.current && audioCtxRef.current) {
+                            if (audioCtxRef.current.state === 'suspended') {
+                              audioCtxRef.current.resume().catch(() => {})
+                            }
+                            gainNodeRef.current.gain.value = v
+                          } else if (videoRef.current) {
+                            videoRef.current.volume = Math.min(v, 1.0)
+                          }
                         }}
                       />
+                    )}
+                    {volume > 1.0 && !muted && (
+                      <span className="livetv-vol-boost-label">{Math.round(volume * 100)}%</span>
                     )}
                   </div>
 

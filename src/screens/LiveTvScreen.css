@@ -552,12 +552,19 @@
 
 .livetv-vol-slider {
   -webkit-appearance: none;
-  width: 70px;
+  width: 90px;
   height: 3px;
   border-radius: 2px;
   background: rgba(255,255,255,0.25);
   cursor: pointer;
   outline: none;
+}
+.livetv-vol-boost-label {
+  color: #ff9800;
+  font-size: 11px;
+  margin-left: 4px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 .livetv-vol-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
