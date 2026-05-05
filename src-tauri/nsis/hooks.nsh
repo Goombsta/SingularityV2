@@ -18,12 +18,21 @@
   ${NSD_CreateRadioButton} 10u 54u 100% 12u "Uninstall — Removes all playlists and settings"
   Pop $2
 
-  nsDialogs::Show
+  ${NSD_CreateButton} 40% 75u 100u 14u "OK"
+  Pop $4
 
-  ${NSD_GetState} $2 $3
-  ${If} $3 == ${BST_CHECKED}
-    ; User chose to remove data — delete app data directory
-    RMDir /r "$LOCALAPPDATA\${BUNDLEID}"
+  ; Event loop: show dialog until user clicks OK or Back
+  nsDialogs::Show
+  Pop $5
+  ${If} $5 == 0
+    ; User clicked OK: check radio state and proceed
+    ${NSD_GetState} $2 $3
+    ${If} $3 == ${BST_CHECKED}
+      RMDir /r "$LOCALAPPDATA\${BUNDLEID}"
+    ${EndIf}
+  ${Else}
+    ; User clicked Back or other: abort installation
+    Abort
   ${EndIf}
 
   skip_uninstall_prompt:
