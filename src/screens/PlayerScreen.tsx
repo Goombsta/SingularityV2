@@ -58,6 +58,7 @@ function getPlatform(): string {
 }
 function isWindowsPlatform(): boolean { return getPlatform() === 'windows' }
 function isAndroidPlatform(): boolean { return getPlatform() === 'android' }
+const VOLUME_MAX = isWindowsPlatform() ? 150 : 100
 
 function getNextEpisode(seasons: Record<string, Episode[]>, currentEpisodeId: string): Episode | null {
   const sortedSeasons = Object.keys(seasons).sort((a, b) => Number(a) - Number(b))
@@ -1051,11 +1052,14 @@ export default function PlayerScreen() {
               type="range"
               className="volume-bar"
               min={0}
-              max={100}
+              max={VOLUME_MAX}
               step={1}
               value={muted ? 0 : volume}
               onChange={handleVolumeChange}
             />
+            {volume > 100 && !muted && (
+              <span className="volume-boost-label">{volume}%</span>
+            )}
           </div>
 
           {/* Center: skip-back | play | skip-fwd */}

@@ -320,6 +320,7 @@ mod windows_impl {
         // If the output device doesn't support the codec, the result is silence.
         // Forcing software decode produces audio on any output device.
         let _ = mpv_set_str(ctx, "audio-spdif", "");
+        let _ = mpv_set_str(ctx, "volume-max", "150");
         let _ = mpv_set_str(ctx, "network-timeout", "30");
         let _ = mpv_set_str(ctx, "cache", "yes");
         let _ = mpv_set_str(ctx, "cache-pause", "no");
@@ -413,7 +414,7 @@ mod windows_impl {
         Ok(())
     }
 
-    /// Set volume (0–100).
+    /// Set volume (0–150, values above 100 use software amplification).
     #[tauri::command]
     pub async fn mpv_set_volume(
         state: State<'_, MpvStore>,
@@ -422,7 +423,7 @@ mod windows_impl {
     ) -> CmdResult<()> {
         let guard = state.players.lock().map_err(|e| format!("player state lock poisoned: {e}"))?;
         let player = guard.get(&player_id).ok_or("player not found")?;
-        mpv_set_property_f64(player.ctx.0, "volume", volume.clamp(0.0, 100.0));
+        mpv_set_property_f64(player.ctx.0, "volume", volume.clamp(0.0, 150.0));
         Ok(())
     }
 
