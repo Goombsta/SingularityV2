@@ -321,7 +321,8 @@ mod windows_impl {
         // Forcing software decode produces audio on any output device.
         let _ = mpv_set_str(ctx, "audio-spdif", "");
         let _ = mpv_set_str(ctx, "audio-client-name", "Singularity");
-        let _ = mpv_set_str(ctx, "volume-max", "150");
+        let _ = mpv_set_str(ctx, "volume-max", "300");
+        let _ = mpv_set_str(ctx, "volume-gain-max", "10");
         let _ = mpv_set_str(ctx, "network-timeout", "30");
         let _ = mpv_set_str(ctx, "cache", "yes");
         let _ = mpv_set_str(ctx, "cache-pause", "no");
@@ -415,7 +416,7 @@ mod windows_impl {
         Ok(())
     }
 
-    /// Set volume (0–150, values above 100 use software amplification).
+    /// Set volume (0–300, values above 100 use software gain).
     #[tauri::command]
     pub async fn mpv_set_volume(
         state: State<'_, MpvStore>,
@@ -424,7 +425,14 @@ mod windows_impl {
     ) -> CmdResult<()> {
         let guard = state.players.lock().map_err(|e| format!("player state lock poisoned: {e}"))?;
         let player = guard.get(&player_id).ok_or("player not found")?;
-        mpv_set_property_f64(player.ctx.0, "volume", volume.clamp(0.0, 150.0));
+        let volume = volume.clamp(0.0, 300.0);
+        if volume <= 100.0 {
+            mpv_set_property_f64(player.ctx.0, "volume", volume);
+            mpv_set_property_f64(player.ctx.0, "volume-gain", 0.0);
+        } else {
+            mpv_set_property_f64(player.ctx.0, "volume", 100.0);
+            mpv_set_property_f64(player.ctx.0, "volume-gain", 20.0 * (volume / 100.0).log10());
+        }
         Ok(())
     }
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { invoke } from '@tauri-apps/api/core'
 import { platform } from '@tauri-apps/plugin-os'
@@ -14,7 +14,7 @@ function getLtvPlatform(): string {
   }
   return _ltvPlatform
 }
-const LTV_VOLUME_MAX = getLtvPlatform() === 'windows' ? 1.5 : 1.0
+const LTV_VOLUME_MAX = getLtvPlatform() === 'windows' ? 3.0 : 1.0
 
 // Proxy loader for HLS.js — rewrites fragment URLs through the local Rust proxy
 // so CDNs never see browser Origin/Referer headers. Only used for explicit .m3u8 URLs.
@@ -73,13 +73,17 @@ export default function LiveTvScreen() {
   const proxyPortRef = useRef<number | null>(null)
   const audioCtxRef = useRef<AudioContext | null>(null)
   const gainNodeRef = useRef<GainNode | null>(null)
+  const compressorNodeRef = useRef<DynamicsCompressorNode | null>(null)
   const audioSrcRef = useRef<MediaElementAudioSourceNode | null>(null)
+  const boostedVideoRef = useRef<HTMLVideoElement | null>(null)
+  const controlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [paused, setPaused] = useState(false)
   const [position, setPosition] = useState(0)
   const [duration, setDuration] = useState(0)
   const [volume, setVolume] = useState(1)
   const [muted, setMuted] = useState(false)
   const [showVol, setShowVol] = useState(false)
+  const [showControls, setShowControls] = useState(true)
   const [showTechStats, setShowTechStats] = useState(false)
   const [ccEnabled, setCcEnabled] = useState(false)
   const [techStats, setTechStats] = useState({
@@ -88,36 +92,112 @@ export default function LiveTvScreen() {
     audioCodec: '—', audioChannels: '—',
   })
 
+  const cleanupAudioBoost = useCallback(() => {
+    try { audioSrcRef.current?.disconnect() } catch {}
+    try { gainNodeRef.current?.disconnect() } catch {}
+    try { compressorNodeRef.current?.disconnect() } catch {}
+    try { audioCtxRef.current?.close() } catch {}
+    audioCtxRef.current = null
+    audioSrcRef.current = null
+    gainNodeRef.current = null
+    compressorNodeRef.current = null
+    boostedVideoRef.current = null
+  }, [])
+
+  const syncLiveVolume = useCallback((nextVolume: number, nextMuted: boolean) => {
+    const video = videoRef.current
+    if (gainNodeRef.current) {
+      if (audioCtxRef.current?.state === 'suspended') {
+        audioCtxRef.current.resume().catch(() => {})
+      }
+      gainNodeRef.current.gain.value = nextMuted ? 0 : nextVolume
+      if (video) {
+        video.volume = 1.0
+        video.muted = false
+      }
+      return
+    }
+    if (video) {
+      video.volume = Math.min(nextVolume, 1.0)
+      video.muted = nextMuted
+    }
+  }, [])
+
   // Windows-only: route video audio through Web Audio API for >100% volume boost.
   // HTML5 video.volume is hard-capped at 1.0; GainNode lifts that cap.
-  useEffect(() => {
+  const ensureAudioBoost = useCallback(() => {
     if (LTV_VOLUME_MAX <= 1.0) return
     const video = videoRef.current
     if (!video) return
+    if (volume <= 1.0 && !gainNodeRef.current) {
+      syncLiveVolume(volume, muted)
+      return
+    }
+    if (audioSrcRef.current && boostedVideoRef.current === video) {
+      syncLiveVolume(volume, muted)
+      return
+    }
+    cleanupAudioBoost()
     try {
       const ctx = new AudioContext()
       const src = ctx.createMediaElementSource(video)
       const gain = ctx.createGain()
-      gain.gain.value = volume
+      const compressor = ctx.createDynamicsCompressor()
+      compressor.threshold.value = -3
+      compressor.knee.value = 0
+      compressor.ratio.value = 20
+      compressor.attack.value = 0.003
+      compressor.release.value = 0.08
       src.connect(gain)
-      gain.connect(ctx.destination)
+      gain.connect(compressor)
+      compressor.connect(ctx.destination)
       audioCtxRef.current = ctx
       audioSrcRef.current = src
       gainNodeRef.current = gain
-      video.volume = 1.0
+      compressorNodeRef.current = compressor
+      boostedVideoRef.current = video
+      syncLiveVolume(volume, muted)
     } catch (err) {
+      cleanupAudioBoost()
       console.warn('[LiveTV] Web Audio setup failed, falling back to native volume', err)
+      syncLiveVolume(volume, muted)
     }
-    return () => {
-      try { audioSrcRef.current?.disconnect() } catch {}
-      try { gainNodeRef.current?.disconnect() } catch {}
-      try { audioCtxRef.current?.close() } catch {}
-      audioCtxRef.current = null
-      audioSrcRef.current = null
-      gainNodeRef.current = null
+  }, [cleanupAudioBoost, muted, syncLiveVolume, volume])
+
+  useEffect(() => {
+    if (!activeChannel) {
+      cleanupAudioBoost()
+      return
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    ensureAudioBoost()
+  }, [activeChannel, cleanupAudioBoost, ensureAudioBoost])
+
+  useEffect(() => {
+    syncLiveVolume(volume, muted)
+  }, [muted, syncLiveVolume, volume])
+
+  useEffect(() => cleanupAudioBoost, [cleanupAudioBoost])
+
+  const resetControlsTimer = useCallback(() => {
+    setShowControls(true)
+    if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current)
+    controlsTimerRef.current = setTimeout(() => setShowControls(false), 3000)
   }, [])
+
+  useEffect(() => {
+    if (!activeChannel) return
+    resetControlsTimer()
+    return () => {
+      if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current)
+    }
+  }, [activeChannel, resetControlsTimer])
+
+  useEffect(() => {
+    if (!activeChannel) return
+    const onKeyDown = () => resetControlsTimer()
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [activeChannel, resetControlsTimer])
 
   // Poll tech stats when panel is open
   useEffect(() => {
@@ -385,12 +465,14 @@ export default function LiveTvScreen() {
     if (!v) return
     if (v.paused) { v.play().catch(() => {}); setPaused(false) }
     else { v.pause(); setPaused(true) }
+    resetControlsTimer()
   }
 
   const seek = (delta: number) => {
     const v = videoRef.current
     if (!v) return
     v.currentTime = Math.max(0, v.currentTime + delta)
+    resetControlsTimer()
   }
 
   const toggleCC = () => {
@@ -409,6 +491,7 @@ export default function LiveTvScreen() {
         hls.subtitleTrack = -1
       }
     }
+    resetControlsTimer()
   }
 
   const formatTime = (s: number) => {
@@ -568,7 +651,13 @@ export default function LiveTvScreen() {
       </div>{/* end livetv-left-panels */}
 
       {/* ── Right: Player panel ── */}
-      <section className="livetv-player-panel">
+      <section
+        className={`livetv-player-panel ${showControls ? 'controls-visible' : 'controls-hidden'}`}
+        onPointerMove={activeChannel ? resetControlsTimer : undefined}
+        onPointerDown={activeChannel ? resetControlsTimer : undefined}
+        onTouchStart={activeChannel ? resetControlsTimer : undefined}
+        onClick={() => { if (activeChannel && !showControls) resetControlsTimer() }}
+      >
         {activeChannel ? (
           <>
             {/* Channel title bar */}
@@ -594,6 +683,8 @@ export default function LiveTvScreen() {
                 onDurationChange={(e) => setDuration(e.currentTarget.duration)}
                 onPlay={() => setPaused(false)}
                 onPause={() => setPaused(true)}
+                onLoadedMetadata={ensureAudioBoost}
+                onPlaying={ensureAudioBoost}
               />
             </div>
 
@@ -619,7 +710,7 @@ export default function LiveTvScreen() {
             )}
 
             {/* Controls + EPG — transparent gradient overlay at bottom */}
-            <div className="livetv-controls">
+            <div className="livetv-controls" onClick={(e) => e.stopPropagation()}>
               {/* EPG now-playing */}
               {epgNow && (
                 <div className="livetv-epg-bar">
@@ -635,6 +726,7 @@ export default function LiveTvScreen() {
                   const rect = e.currentTarget.getBoundingClientRect()
                   const pct = (e.clientX - rect.left) / rect.width
                   videoRef.current.currentTime = pct * duration
+                  resetControlsTimer()
                 }}>
                   <div className="livetv-seek-fill" style={{ width: `${progress}%` }} />
                   <div className="livetv-seek-thumb" style={{ left: `${progress}%` }} />
@@ -659,11 +751,8 @@ export default function LiveTvScreen() {
                     <button className="livetv-ctrl-btn" onClick={() => {
                       const next = !muted
                       setMuted(next)
-                      if (gainNodeRef.current) {
-                        gainNodeRef.current.gain.value = next ? 0 : volume
-                      } else if (videoRef.current) {
-                        videoRef.current.muted = next
-                      }
+                      syncLiveVolume(volume, next)
+                      resetControlsTimer()
                     }}>
                       <VolumeIcon />
                     </button>
@@ -675,14 +764,8 @@ export default function LiveTvScreen() {
                           const v = Number(e.target.value)
                           setVolume(v)
                           if (muted) setMuted(false)
-                          if (gainNodeRef.current && audioCtxRef.current) {
-                            if (audioCtxRef.current.state === 'suspended') {
-                              audioCtxRef.current.resume().catch(() => {})
-                            }
-                            gainNodeRef.current.gain.value = v
-                          } else if (videoRef.current) {
-                            videoRef.current.volume = Math.min(v, 1.0)
-                          }
+                          syncLiveVolume(v, false)
+                          resetControlsTimer()
                         }}
                       />
                     )}
@@ -711,7 +794,7 @@ export default function LiveTvScreen() {
                   </button>
                   <button
                     className={`livetv-ctrl-btn livetv-tech-stats-btn ${showTechStats ? 'active' : ''}`}
-                    onClick={() => setShowTechStats(v => !v)}
+                    onClick={() => { setShowTechStats(v => !v); resetControlsTimer() }}
                     title="Tech Stats"
                   >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">

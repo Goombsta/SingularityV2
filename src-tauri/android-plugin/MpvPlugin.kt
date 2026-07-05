@@ -5,6 +5,9 @@ import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import `is`.xyz.mpv.MPVLib
 import app.tauri.annotation.Command
 import app.tauri.annotation.TauriPlugin
@@ -27,7 +30,7 @@ class MpvPlugin(private val activity: android.app.Activity) : Plugin(activity) {
             MPVLib.setOptionString("vo", "gpu")
         }
         override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
-            // mpv handles aspect ratio internally
+            MPVLib.setPropertyString("android-surface-size", "${width}x$height")
         }
         override fun surfaceDestroyed(holder: SurfaceHolder) {
             MPVLib.detachSurface()
@@ -130,6 +133,22 @@ class MpvPlugin(private val activity: android.app.Activity) : Plugin(activity) {
         players[playerId] ?: run { invoke.reject("Player not found"); return }
         MPVLib.setPropertyInt("volume", volume.coerceIn(0, 100))
         invoke.resolve()
+    }
+
+    @Command
+    fun mpvSetFullscreen(invoke: Invoke) {
+        val fullscreen = invoke.getArgs().getBoolean("fullscreen")
+        activity.runOnUiThread {
+            val controller = WindowCompat.getInsetsController(activity.window, activity.window.decorView)
+            controller.systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            if (fullscreen) {
+                controller.hide(WindowInsetsCompat.Type.systemBars())
+            } else {
+                controller.show(WindowInsetsCompat.Type.systemBars())
+            }
+            invoke.resolve()
+        }
     }
 
     @Command

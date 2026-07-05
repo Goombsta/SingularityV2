@@ -19,6 +19,7 @@ fn main() {
                         "mpv_pause",
                         "mpv_resume",
                         "mpv_set_volume",
+                        "mpv_set_fullscreen",
                         "mpv_seek",
                         "mpv_resize",
                         "mpv_destroy",

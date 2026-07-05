@@ -2355,10 +2355,10 @@
           "markdownDescription": "Denies the unminimize command without any pre-configured scope."
         },
         {
-          "description": "Default plugin permissions.\n#### This default permission set includes:\n\n- `allow-mpv-create`\n- `allow-mpv-load-url`\n- `allow-mpv-pause`\n- `allow-mpv-resume`\n- `allow-mpv-set-volume`\n- `allow-mpv-seek`\n- `allow-mpv-resize`\n- `allow-mpv-destroy`\n- `allow-player-get-properties`\n- `allow-mpv-get-tracks`\n- `allow-mpv-set-audio-track`\n- `allow-mpv-set-sub-track`\n- `allow-mpv-set-sub-scale`",
+          "description": "Default plugin permissions.\n#### This default permission set includes:\n\n- `allow-mpv-create`\n- `allow-mpv-load-url`\n- `allow-mpv-pause`\n- `allow-mpv-resume`\n- `allow-mpv-set-volume`\n- `allow-mpv-set-fullscreen`\n- `allow-mpv-seek`\n- `allow-mpv-resize`\n- `allow-mpv-destroy`\n- `allow-player-get-properties`\n- `allow-mpv-get-tracks`\n- `allow-mpv-set-audio-track`\n- `allow-mpv-set-sub-track`\n- `allow-mpv-set-sub-scale`",
           "type": "string",
           "const": "mpv:default",
-          "markdownDescription": "Default plugin permissions.\n#### This default permission set includes:\n\n- `allow-mpv-create`\n- `allow-mpv-load-url`\n- `allow-mpv-pause`\n- `allow-mpv-resume`\n- `allow-mpv-set-volume`\n- `allow-mpv-seek`\n- `allow-mpv-resize`\n- `allow-mpv-destroy`\n- `allow-player-get-properties`\n- `allow-mpv-get-tracks`\n- `allow-mpv-set-audio-track`\n- `allow-mpv-set-sub-track`\n- `allow-mpv-set-sub-scale`"
+          "markdownDescription": "Default plugin permissions.\n#### This default permission set includes:\n\n- `allow-mpv-create`\n- `allow-mpv-load-url`\n- `allow-mpv-pause`\n- `allow-mpv-resume`\n- `allow-mpv-set-volume`\n- `allow-mpv-set-fullscreen`\n- `allow-mpv-seek`\n- `allow-mpv-resize`\n- `allow-mpv-destroy`\n- `allow-player-get-properties`\n- `allow-mpv-get-tracks`\n- `allow-mpv-set-audio-track`\n- `allow-mpv-set-sub-track`\n- `allow-mpv-set-sub-scale`"
         },
         {
           "description": "Enables the mpv_create command without any pre-configured scope.",
@@ -2413,6 +2413,12 @@
           "type": "string",
           "const": "mpv:allow-mpv-set-audio-track",
           "markdownDescription": "Enables the mpv_set_audio_track command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the mpv_set_fullscreen command without any pre-configured scope.",
+          "type": "string",
+          "const": "mpv:allow-mpv-set-fullscreen",
+          "markdownDescription": "Enables the mpv_set_fullscreen command without any pre-configured scope."
         },
         {
           "description": "Enables the mpv_set_sub_scale command without any pre-configured scope.",
@@ -2491,6 +2497,12 @@
           "type": "string",
           "const": "mpv:deny-mpv-set-audio-track",
           "markdownDescription": "Denies the mpv_set_audio_track command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the mpv_set_fullscreen command without any pre-configured scope.",
+          "type": "string",
+          "const": "mpv:deny-mpv-set-fullscreen",
+          "markdownDescription": "Denies the mpv_set_fullscreen command without any pre-configured scope."
         },
         {
           "description": "Denies the mpv_set_sub_scale command without any pre-configured scope.",

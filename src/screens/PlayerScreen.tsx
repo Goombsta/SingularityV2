@@ -58,7 +58,7 @@ function getPlatform(): string {
 }
 function isWindowsPlatform(): boolean { return getPlatform() === 'windows' }
 function isAndroidPlatform(): boolean { return getPlatform() === 'android' }
-const VOLUME_MAX = isWindowsPlatform() ? 150 : 100
+const VOLUME_MAX = isWindowsPlatform() ? 300 : 100
 
 function getNextEpisode(seasons: Record<string, Episode[]>, currentEpisodeId: string): Episode | null {
   const sortedSeasons = Object.keys(seasons).sort((a, b) => Number(a) - Number(b))
@@ -637,10 +637,26 @@ export default function PlayerScreen() {
     controlsTimer.current = setTimeout(() => setShowControls(false), 3000)
   }, [])
 
+  const revealControls = useCallback(() => {
+    resetControlsTimer()
+  }, [resetControlsTimer])
+
   useEffect(() => {
     resetControlsTimer()
     return () => { if (controlsTimer.current) clearTimeout(controlsTimer.current) }
   }, [resetControlsTimer])
+
+  useEffect(() => {
+    const onKeyDown = () => resetControlsTimer()
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [resetControlsTimer])
+
+  useEffect(() => {
+    const onFullscreenChange = () => setFullscreen(Boolean(document.fullscreenElement))
+    document.addEventListener('fullscreenchange', onFullscreenChange)
+    return () => document.removeEventListener('fullscreenchange', onFullscreenChange)
+  }, [])
 
   // Auto-dismiss the unsupported audio codec warning after 6 s
   useEffect(() => {
@@ -718,13 +734,17 @@ export default function PlayerScreen() {
     resetControlsTimer()
   }
 
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen()
-      setFullscreen(true)
+  const toggleFullscreen = async () => {
+    const next = !fullscreen
+    if (isAndroidPlatform() && playerMode === 'mpv') {
+      try {
+        await playerCmd('mpv_set_fullscreen', { fullscreen: next })
+        setFullscreen(next)
+      } catch { /* keep current fullscreen state */ }
+    } else if (!document.fullscreenElement) {
+      await document.documentElement.requestFullscreen().catch(() => {})
     } else {
-      document.exitFullscreen()
-      setFullscreen(false)
+      await document.exitFullscreen().catch(() => {})
     }
     resetControlsTimer()
   }
@@ -882,7 +902,8 @@ export default function PlayerScreen() {
   return (
     <div
       className={`player-screen ${showControls ? 'show-controls' : ''} ${playerMode === 'mpv' && videoReady ? 'mpv-mode' : ''} ${fading ? 'fading' : ''}`}
-      onMouseMove={resetControlsTimer}
+      onPointerMove={revealControls}
+      onTouchStart={revealControls}
       onClick={() => setShowTracksPanel(false)}
     >
       {playerMode === 'mpv' ? (
@@ -969,7 +990,17 @@ export default function PlayerScreen() {
       )}
 
       {/* Invisible click-to-play overlay */}
-      <div className="player-click-overlay" onClick={(e) => { e.stopPropagation(); togglePlay() }} />
+      <div
+        className="player-click-overlay"
+        onClick={(e) => {
+          e.stopPropagation()
+          if (!showControls) {
+            resetControlsTimer()
+            return
+          }
+          togglePlay()
+        }}
+      />
 
       {/* Tech Stats overlay */}
       {showTechStats && (
@@ -1024,7 +1055,12 @@ export default function PlayerScreen() {
       </div>
 
       {/* Bottom controls */}
-      <div className="player-controls" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="player-controls"
+        onPointerDown={revealControls}
+        onTouchStart={revealControls}
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Seek bar */}
         <div className="seek-bar-wrap">
           <span className="time-label">{formatTime(position)}</span>

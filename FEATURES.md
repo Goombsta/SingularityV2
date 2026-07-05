@@ -50,6 +50,12 @@ Add your favorite streams through multiple formats:
 - Vite + React 18 frontend for instant feedback
 - Optimized bundle size and startup time
 
+## v0.6.1 Player Updates
+- **Desktop volume boost** — Live TV and native MPV playback now support boosted volume up to 300%.
+- **Limiter for Live TV boost** — Live TV uses a Web Audio compressor after gain to reduce harsh clipping at high boost levels.
+- **Auto-hiding Live TV controls** — Seekbar and playback controls now hide after inactivity and reappear on pointer, touch, or keyboard input.
+- **Android fullscreen fix** — The Android MPV plugin now exposes a native fullscreen command that hides system bars in immersive mode.
+
 ## 🔄 Data Persistence
 - Favorites saved locally
 - EPG source persistence
@@ -57,6 +63,6 @@ Add your favorite streams through multiple formats:
 
 ---
 
-**Current Version:** 0.4.3  
+**Current Version:** 0.6.1  
 **Platforms:** Android 7.0+, Windows 10+  
 **Built with:** Tauri 2.0 | React 18 | Rust | TypeScript
