@@ -50,6 +50,12 @@ Add your favorite streams through multiple formats:
 - Vite + React 18 frontend for instant feedback
 - Optimized bundle size and startup time
 
+## v0.6.2 Interactive Help Center
+- **Guided setup** â€” A new Help destination provides step-by-step Xtream, M3U, playlist removal, and XMLTV EPG guidance with safe example values.
+- **First-run assistance** â€” When no playlists are active, the Xtream setup guide opens directly on the Login screen and highlights the required fields.
+- **App navigation guides** â€” Interactive tours cover Home, Live TV, Movies, Series, Multiview, the EPG Guide, and player language, subtitle, and technical-stat controls.
+- **Safe by design** â€” Guides can navigate to the relevant screen and select a setup type, but never read, enter, submit, or remove user data.
+
 ## v0.6.1 Player Updates
 - **Desktop volume boost** — Live TV and native MPV playback now support boosted volume up to 300%.
 - **Limiter for Live TV boost** — Live TV uses a Web Audio compressor after gain to reduce harsh clipping at high boost levels.
@@ -63,6 +69,6 @@ Add your favorite streams through multiple formats:
 
 ---
 
-**Current Version:** 0.6.1  
+**Current Version:** 0.6.2
 **Platforms:** Android 7.0+, Windows 10+  
 **Built with:** Tauri 2.0 | React 18 | Rust | TypeScript
