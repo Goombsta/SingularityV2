@@ -11,6 +11,8 @@ import PlayerScreen from './screens/PlayerScreen'
 import MultiviewScreen from './screens/MultiviewScreen'
 import EpgScreen from './screens/EpgScreen'
 import LoginScreen from './screens/LoginScreen'
+import HelpScreen from './screens/HelpScreen'
+import HelpRoot from './components/help/HelpRoot'
 
 // Forces a full remount of PlayerScreen on every navigation to /player,
 // including replace: true (same-route) navigations for auto-play next episode.
@@ -23,20 +25,26 @@ function PlayerScreenWrapper() {
 
 export const router = createBrowserRouter([
   {
-    path: '/',
-    element: <MainLayout />,
+    element: <HelpRoot />,
     children: [
-      { index: true, element: <HomeScreen /> },
-      { path: 'live', element: <LiveTvScreen /> },
-      { path: 'vod', element: <VodScreen /> },
-      { path: 'series', element: <SeriesScreen /> },
-      { path: 'search', element: <SearchScreen /> },
-      { path: 'mylist', element: <MyListScreen /> },
-      { path: 'epg', element: <EpgScreen /> },
-      { path: 'multiview', element: <MultiviewScreen /> },
-      { path: 'settings', element: <SettingsScreen /> },
+      {
+        path: '/',
+        element: <MainLayout />,
+        children: [
+          { index: true, element: <HomeScreen /> },
+          { path: 'live', element: <LiveTvScreen /> },
+          { path: 'vod', element: <VodScreen /> },
+          { path: 'series', element: <SeriesScreen /> },
+          { path: 'search', element: <SearchScreen /> },
+          { path: 'mylist', element: <MyListScreen /> },
+          { path: 'epg', element: <EpgScreen /> },
+          { path: 'multiview', element: <MultiviewScreen /> },
+          { path: 'settings', element: <SettingsScreen /> },
+          { path: 'help', element: <HelpScreen /> },
+        ],
+      },
+      { path: '/player', element: <PlayerScreenWrapper /> },
+      { path: '/login', element: <LoginScreen /> },
     ],
   },
-  { path: '/player', element: <PlayerScreenWrapper /> },
-  { path: '/login', element: <LoginScreen /> },
 ])

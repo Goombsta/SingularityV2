@@ -521,7 +521,7 @@ export default function LiveTvScreen() {
         onMouseLeave={handlePanelsLeave}
       >
       {/* ── Left: Category sidebar ── */}
-      <aside className="livetv-categories">
+      <aside className="livetv-categories" data-help="live-categories">
         <div className="livetv-cat-header">
           <span className="livetv-cat-title">Channels</span>
           <span className="livetv-cat-count">{channels.length}</span>
@@ -533,6 +533,7 @@ export default function LiveTvScreen() {
         <div className="livetv-cat-search">
           <input
             className="livetv-search-input"
+            data-help="live-search"
             placeholder="Search…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -591,7 +592,7 @@ export default function LiveTvScreen() {
                       ) : (
                         <div className="livetv-ch-logo-placeholder">{ch.name.slice(0, 2).toUpperCase()}</div>
                       )}
-                      <button className="livetv-ch-fav active" onClick={(e) => toggleFavorite(ch, e)} title="Remove from favorites">♥</button>
+                      <button className="livetv-ch-fav active" onClick={(e) => toggleFavorite(ch, e)} title="Remove from favorites" data-help="live-favorite">♥</button>
                     </div>
                     <p className="livetv-ch-name truncate">{ch.name}</p>
                     {epgTitle && <p className="livetv-ch-epg truncate">{epgTitle}</p>}
@@ -636,6 +637,7 @@ export default function LiveTvScreen() {
                       className={`livetv-ch-fav${isFavorite(ch.id) ? ' active' : ''}`}
                       onClick={(e) => toggleFavorite(ch, e)}
                       title={isFavorite(ch.id) ? 'Remove from favorites' : 'Add to favorites'}
+                      data-help="live-favorite"
                     >
                       {isFavorite(ch.id) ? '♥' : '♡'}
                     </button>
@@ -796,6 +798,7 @@ export default function LiveTvScreen() {
                     className={`livetv-ctrl-btn livetv-tech-stats-btn ${showTechStats ? 'active' : ''}`}
                     onClick={() => { setShowTechStats(v => !v); resetControlsTimer() }}
                     title="Tech Stats"
+                    data-help="live-tech-stats"
                   >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
                       <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>

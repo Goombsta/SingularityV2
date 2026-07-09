@@ -1139,10 +1139,11 @@ export default function PlayerScreen() {
               </button>
             )}
             {/* Tech Stats toggle */}
-            <button
-              className={`ctrl-btn tech-stats-btn ${showTechStats ? 'active' : ''}`}
-              onClick={(e) => { e.stopPropagation(); setShowTechStats(v => !v); resetControlsTimer() }}
-              title="Tech Stats"
+              <button
+                className={`ctrl-btn tech-stats-btn ${showTechStats ? 'active' : ''}`}
+                onClick={(e) => { e.stopPropagation(); setShowTechStats(v => !v); resetControlsTimer() }}
+                title="Tech Stats"
+                data-help="player-tech-stats"
             >
               <svg className="tech-stats-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
@@ -1154,6 +1155,7 @@ export default function PlayerScreen() {
                 className={`ctrl-btn track-btn ${showTracksPanel ? 'active' : ''}`}
                 onClick={() => setShowTracksPanel((v) => !v)}
                 title="Audio & Subtitles"
+                data-help="player-tracks"
               >
                 <svg className="tracks-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>

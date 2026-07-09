@@ -512,7 +512,7 @@ export default function EpgScreen() {
   return (
     <div className="epg-screen">
       {/* ── Category pill column ── */}
-      <aside className="epg-categories">
+      <aside className="epg-categories" data-help="epg-filters">
         <div className="epg-cat-header">
           <span className="epg-cat-title">EPG</span>
           <span className="epg-cat-count">{channels.length}</span>
@@ -551,7 +551,7 @@ export default function EpgScreen() {
       </aside>
 
       {/* ── Main grid area ── */}
-      <div className="epg-main">
+      <div className="epg-main" data-help="epg-grid">
         <div className="epg-topbar">
           <span className="epg-topbar-title">EPG Guide</span>
           {status === 'loading' && <span className="epg-loading-badge">Loading…</span>}

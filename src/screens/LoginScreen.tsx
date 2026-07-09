@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { usePlaylistStore } from '../store/slices/playlistSlice'
 import './LoginScreen.css'
 
@@ -7,6 +7,7 @@ type PlaylistType = 'xtream' | 'm3u' | 'stalker'
 
 export default function LoginScreen() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { addXtream, addM3u, addStalker, status } = usePlaylistStore()
 
   const [type, setType] = useState<PlaylistType>('xtream')
@@ -16,6 +17,14 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('')
   const [mac, setMac] = useState('')
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const requestedType = (location.state as { helpHandoff?: { setupType?: PlaylistType } } | null)?.helpHandoff?.setupType
+    if (requestedType === 'xtream' || requestedType === 'm3u') {
+      setType(requestedType)
+      setError(null)
+    }
+  }, [location.state])
 
   const loading = status === 'loading'
 
@@ -48,9 +57,10 @@ export default function LoginScreen() {
       <div className="login-card">
         <div className="login-logo">SINGULARITY DEUX</div>
         <p className="login-subtitle">Add your playlist to get started</p>
+        <button className="login-help-link" onClick={() => navigate('/help')}>Need help adding a playlist?</button>
 
         {/* Type selector */}
-        <div className="login-type-tabs">
+        <div className="login-type-tabs" data-help="login-type-tabs">
           {(['xtream', 'm3u', 'stalker'] as PlaylistType[]).map((t) => (
             <button
               key={t}
@@ -63,7 +73,7 @@ export default function LoginScreen() {
         </div>
 
         {/* Fields */}
-        <div className="login-fields">
+        <div className="login-fields" data-help="playlist-setup-form">
           <input
             className="login-input"
             placeholder="Playlist name (optional)"
@@ -112,6 +122,7 @@ export default function LoginScreen() {
           className="login-connect-btn"
           onClick={handleConnect}
           disabled={loading}
+          data-help="playlist-connect"
         >
           {loading ? 'Connecting...' : 'Connect'}
         </button>

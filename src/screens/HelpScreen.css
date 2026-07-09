@@ -1,0 +1,15 @@
+.help-screen { min-height: 100%; overflow: auto; padding: 52px max(36px, 7vw) 48px calc(var(--sidebar-offset) + 36px); background: var(--bg-primary); }
+.help-hero { max-width: 720px; margin-bottom: 34px; }
+.help-eyebrow { color: var(--accent-light); font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+.help-hero h1 { margin-top: 8px; font-size: clamp(30px, 4vw, 46px); line-height: 1.08; }
+.help-hero p:last-child { margin-top: 14px; color: var(--text-secondary); line-height: 1.6; font-size: 16px; }
+.help-topic-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(235px, 1fr)); gap: 16px; max-width: 1120px; }
+.help-topic-card { display: flex; min-height: 190px; flex-direction: column; align-items: flex-start; padding: 20px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); }
+.help-topic-card h2 { font-size: 17px; line-height: 1.25; }
+.help-topic-card p { margin-top: 8px; color: var(--text-secondary); line-height: 1.5; }
+.help-topic-card button { min-height: 44px; margin-top: auto; padding: 0 14px; border-radius: 8px; background: rgba(124, 58, 237, 0.2); color: var(--accent-light); font-weight: 700; }
+.help-topic-card button:hover, .help-topic-card button:focus-visible { background: var(--accent); color: white; }
+
+@media (max-width: 700px) {
+  .help-screen { padding: 28px 20px 32px 92px; }
+}

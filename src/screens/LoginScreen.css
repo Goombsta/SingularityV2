@@ -32,6 +32,17 @@
   margin: -8px 0 8px;
 }
 
+.login-help-link {
+  min-height: 44px;
+  margin: -14px 0 2px;
+  color: var(--accent-light, #a78bfa);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.login-help-link:hover,
+.login-help-link:focus-visible { text-decoration: underline; }
+
 /* Type tabs */
 .login-type-tabs {
   display: flex;

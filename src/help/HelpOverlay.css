@@ -1,0 +1,51 @@
+.help-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  pointer-events: none;
+}
+
+.help-highlight {
+  position: fixed;
+  border: 2px solid var(--accent-light);
+  border-radius: 10px;
+  box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.25), 0 0 24px rgba(124, 58, 237, 0.7);
+  pointer-events: none;
+  transition: top 180ms ease, left 180ms ease, width 180ms ease, height 180ms ease;
+}
+
+.help-guide-panel {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  width: min(390px, calc(100vw - 32px));
+  max-height: min(520px, calc(100vh - 32px));
+  overflow: auto;
+  pointer-events: auto;
+  background: rgba(24, 24, 24, 0.98);
+  border: 1px solid rgba(167, 139, 250, 0.65);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.65);
+  padding: 20px;
+  outline: none;
+}
+
+.help-guide-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.help-guide-kicker { color: var(--accent-light); font-size: 11px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; }
+.help-guide-close { width: 36px; height: 36px; border-radius: 8px; color: var(--text-secondary); font-size: 24px; line-height: 1; }
+.help-guide-close:hover, .help-guide-close:focus-visible { background: rgba(255,255,255,0.08); color: var(--text-primary); }
+.help-guide-panel h2 { margin: 14px 0 8px; font-size: 20px; line-height: 1.2; }
+.help-guide-panel p { color: var(--text-secondary); font-size: 14px; line-height: 1.55; }
+.help-guide-example { display: block; margin-top: 14px; padding: 12px; border-radius: 8px; white-space: pre-wrap; word-break: break-word; color: #ddd6fe; background: rgba(124, 58, 237, 0.14); border: 1px solid rgba(167, 139, 250, 0.25); font-size: 12px; user-select: text; -webkit-user-select: text; }
+.help-guide-waiting { margin-top: 12px; color: var(--accent-light) !important; }
+.help-guide-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+.help-guide-actions button { min-height: 44px; padding: 0 16px; border-radius: 8px; font-weight: 700; }
+.help-guide-primary { background: var(--accent); color: white; }
+.help-guide-primary:hover:not(:disabled), .help-guide-primary:focus-visible { background: var(--accent-hover); }
+.help-guide-secondary { color: var(--text-primary); background: rgba(255,255,255,0.08); }
+.help-guide-secondary:hover:not(:disabled), .help-guide-secondary:focus-visible { background: rgba(255,255,255,0.14); }
+.help-guide-actions button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+@media (max-width: 700px) {
+  .help-guide-panel { right: 16px; bottom: 16px; width: calc(100vw - 32px); padding: 16px; }
+}
