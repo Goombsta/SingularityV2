@@ -7,12 +7,16 @@ interface ActiveGuide {
   stepIndex: number
 }
 
+interface StartGuideOptions {
+  keepCurrentRoute?: boolean
+}
+
 interface HelpContextValue {
   activeGuide: ActiveGuide | null
   activeTopic: HelpTopic | undefined
   activeStep: GuideStep | undefined
   canAdvance: boolean
-  startGuide: (topicId: string) => void
+  startGuide: (topicId: string, options?: StartGuideOptions) => void
   nextStep: () => void
   previousStep: () => void
   exitGuide: () => void
@@ -41,9 +45,13 @@ export function HelpProvider({ children }: { children: ReactNode }) {
     }
   }, [location.pathname, navigate])
 
-  const startGuide = useCallback((topicId: string) => {
+  const startGuide = useCallback((topicId: string, options?: StartGuideOptions) => {
     const topic = getHelpTopic(topicId)
     if (!topic) return
+    if (options?.keepCurrentRoute) {
+      setActiveGuide({ topicId: topic.id, stepIndex: 0 })
+      return
+    }
     goToStep(topic, 0)
   }, [goToStep])
 

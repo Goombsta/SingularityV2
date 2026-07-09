@@ -22,6 +22,7 @@ function GuideLauncher() {
     <>
       <output data-testid="pathname">{location.pathname}</output>
       <button onClick={() => startGuide('xtream-setup')}>Start Xtream setup</button>
+      <button onClick={() => startGuide('xtream-setup', { keepCurrentRoute: true })}>Start Xtream setup in place</button>
       <button onClick={() => startGuide('player-controls')}>Start player controls</button>
     </>
   )
@@ -46,6 +47,16 @@ describe('HelpProvider', () => {
     expect(screen.getByRole('heading', { name: 'Enter your Xtream details' })).toBeInTheDocument()
     expect(screen.getByText(/your_username/)).toBeInTheDocument()
     expect(document.querySelector('input')).toBeNull()
+  })
+
+  it('can open the Xtream guide on the login route without redirecting away from its fields', async () => {
+    const user = userEvent.setup()
+    renderGuide('/login')
+
+    await user.click(screen.getByRole('button', { name: 'Start Xtream setup in place' }))
+
+    expect(screen.getByTestId('pathname')).toHaveTextContent('/login')
+    expect(screen.getByRole('heading', { name: 'Enter your Xtream details' })).toBeInTheDocument()
   })
 
   it('waits for the user to open the player instead of navigating or starting playback', async () => {
