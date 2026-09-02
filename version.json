@@ -11,8 +11,12 @@
     "notes": ""
   },
   "smarttv": {
-    "version": "0.1.4",
+    "version": "0.1.5",
     "url": "https://www.singularitytv.app/downloads/SingularityTV.apk",
-    "notes": ""
+    "notes": "Compose Android TV release: smoother Home navigation, restored Settings access, updated branding/background, and Force 4 Streams control.",
+    "versionCode": 10005,
+    "packageName": "com.singularity.tv2",
+    "sha256": "CA18684DD363AEEF8442E5B2C647158C02E6AF021728F64D241A6286E088757E",
+    "signerSha256": "57FC9CE712DC3685F447A7B4AD3B5CE828B3EC860A2AA32AA82201A969D23BC5"
   }
 }
