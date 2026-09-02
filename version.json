@@ -11,12 +11,12 @@
     "notes": ""
   },
   "smarttv": {
-    "version": "0.1.5",
+    "version": "0.1.6",
     "url": "https://www.singularitytv.app/downloads/SingularityTV.apk",
-    "notes": "Compose Android TV release: smoother Home navigation, restored Settings access, updated branding/background, and Force 4 Streams control.",
-    "versionCode": 10005,
+    "notes": "Compose Android TV release: full-bleed Fire TV launcher banner and updated production branding.",
+    "versionCode": 10006,
     "packageName": "com.singularity.tv2",
-    "sha256": "CA18684DD363AEEF8442E5B2C647158C02E6AF021728F64D241A6286E088757E",
+    "sha256": "74B6B0D7C7CEDCE6FEA07D0537A922E84E8280D96FED807B61DE3ADA33A45777",
     "signerSha256": "57FC9CE712DC3685F447A7B4AD3B5CE828B3EC860A2AA32AA82201A969D23BC5"
   }
 }
