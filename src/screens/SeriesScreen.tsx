@@ -297,7 +297,7 @@ export default function SeriesScreen() {
                 <span className="detail-badge">Series</span>
               </div>
               {s.plot && <p className="detail-plot">{s.plot}</p>}
-              <div className="detail-actions">
+              <div className="detail-actions" data-help="series-details">
                 <select
                   className="season-select-pill"
                   value={selectedSeason}
@@ -381,6 +381,7 @@ export default function SeriesScreen() {
         </div>
         <input
           className="search-input"
+          data-help="series-search"
           placeholder="Search series…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}

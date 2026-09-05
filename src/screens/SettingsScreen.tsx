@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { invoke } from '@tauri-apps/api/core'
 import { useUpdate } from '../hooks/useUpdate'
 import { usePlaylistStore } from '../store/slices/playlistSlice'
@@ -21,8 +22,16 @@ function expiryLabel(expiry: string): { text: string; expired: boolean } {
 }
 
 export default function SettingsScreen() {
+  const location = useLocation()
   const [tab, setTab] = useState<Tab>('playlists')
   const [addMode, setAddMode] = useState<AddMode>(null)
+  const helpHandoff = (location.state as { helpHandoff?: { setupType?: AddMode; settingsTab?: Tab; openEpgForm?: boolean } } | null)?.helpHandoff
+
+  useEffect(() => {
+    if (!helpHandoff) return
+    if (helpHandoff.settingsTab) setTab(helpHandoff.settingsTab)
+    if (helpHandoff.setupType === 'xtream' || helpHandoff.setupType === 'm3u') setAddMode(helpHandoff.setupType)
+  }, [helpHandoff])
 
   return (
     <div className="settings-screen">
@@ -32,7 +41,7 @@ export default function SettingsScreen() {
         <button className={`settings-tab ${tab === 'playlists' ? 'active' : ''}`} onClick={() => setTab('playlists')}>
           Playlists
         </button>
-        <button className={`settings-tab ${tab === 'epg' ? 'active' : ''}`} onClick={() => setTab('epg')}>
+        <button className={`settings-tab ${tab === 'epg' ? 'active' : ''}`} onClick={() => setTab('epg')} data-help="epg-settings-tab">
           EPG Sources
         </button>
         <button className={`settings-tab ${tab === 'integrations' ? 'active' : ''}`} onClick={() => setTab('integrations')}>
@@ -44,7 +53,7 @@ export default function SettingsScreen() {
       </div>
 
       {tab === 'playlists' && <PlaylistSettings addMode={addMode} setAddMode={setAddMode} />}
-      {tab === 'epg' && <EpgSettings />}
+      {tab === 'epg' && <EpgSettings openFromHelp={helpHandoff?.openEpgForm === true} />}
       {tab === 'integrations' && <IntegrationsSettings />}
       {tab === 'about' && <AboutSettings />}
     </div>
@@ -63,7 +72,7 @@ function PlaylistSettings({ addMode, setAddMode }: {
     <div className="settings-section">
       {/* Add buttons */}
       {!addMode && (
-        <div className="add-buttons">
+        <div className="add-buttons" data-help="playlist-add-options">
           <button className="add-btn" onClick={() => setAddMode('xtream')}>+ Xtream Codes</button>
           <button className="add-btn" onClick={() => setAddMode('m3u')}>+ M3U / M3U8</button>
           <button className="add-btn" onClick={() => setAddMode('stalker')}>+ Stalker Portal</button>
@@ -75,7 +84,7 @@ function PlaylistSettings({ addMode, setAddMode }: {
       {addMode === 'stalker' && <AddStalkerForm onClose={() => setAddMode(null)} />}
 
       {/* Playlist list */}
-      <div className="playlist-list">
+      <div className="playlist-list" data-help="playlist-list">
         {playlists.length === 0 && (
           <p className="settings-empty">No playlists added yet. Add one above to get started.</p>
         )}
@@ -128,7 +137,7 @@ function PlaylistSettings({ addMode, setAddMode }: {
                       {refreshingId === p.id ? '…' : '↻ Expiry'}
                     </button>
                   )}
-                  <button className="pl-btn danger" onClick={() => removePlaylist(p.id)}>Remove</button>
+                  <button className="pl-btn danger" onClick={() => removePlaylist(p.id)} data-help="playlist-remove">Remove</button>
                 </div>
               </>
             )}
@@ -209,7 +218,7 @@ function AddXtreamForm({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <form className="add-form" onSubmit={handleSubmit}>
+    <form className="add-form" onSubmit={handleSubmit} data-help="playlist-setup-form">
       <h3 className="form-title">Add Xtream Codes Playlist</h3>
       <input className="form-input" placeholder="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} required />
       <input className="form-input" placeholder="Server URL (http://...)" value={form.url} onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))} required />
@@ -221,7 +230,7 @@ function AddXtreamForm({ onClose }: { onClose: () => void }) {
       {error && <p className="form-error">{error}</p>}
       <div className="form-actions">
         <button type="button" className="form-btn cancel" onClick={onClose}>Cancel</button>
-        <button type="submit" className="form-btn submit" disabled={status === 'loading'}>
+        <button type="submit" className="form-btn submit" disabled={status === 'loading'} data-help="playlist-connect">
           {status === 'loading' ? 'Connecting…' : 'Add Playlist'}
         </button>
       </div>
@@ -242,14 +251,14 @@ function AddM3UForm({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <form className="add-form" onSubmit={handleSubmit}>
+    <form className="add-form" onSubmit={handleSubmit} data-help="playlist-setup-form">
       <h3 className="form-title">Add M3U Playlist</h3>
       <input className="form-input" placeholder="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} required />
       <input className="form-input" placeholder="M3U URL or local file path" value={form.url} onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))} required />
       {error && <p className="form-error">{error}</p>}
       <div className="form-actions">
         <button type="button" className="form-btn cancel" onClick={onClose}>Cancel</button>
-        <button type="submit" className="form-btn submit" disabled={status === 'loading'}>
+        <button type="submit" className="form-btn submit" disabled={status === 'loading'} data-help="playlist-connect">
           {status === 'loading' ? 'Loading…' : 'Add Playlist'}
         </button>
       </div>
@@ -289,10 +298,14 @@ function AddStalkerForm({ onClose }: { onClose: () => void }) {
   )
 }
 
-function EpgSettings() {
+function EpgSettings({ openFromHelp }: { openFromHelp: boolean }) {
   const { sources, addSource, removeSource } = useEpgStore()
   const [form, setForm] = useState({ name: '', url: '' })
   const [adding, setAdding] = useState(false)
+
+  useEffect(() => {
+    if (openFromHelp) setAdding(true)
+  }, [openFromHelp])
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -304,10 +317,10 @@ function EpgSettings() {
   return (
     <div className="settings-section">
       {!adding && (
-        <button className="add-btn" onClick={() => setAdding(true)}>+ Add EPG Source</button>
+        <button className="add-btn" onClick={() => setAdding(true)} data-help="epg-add-source">+ Add EPG Source</button>
       )}
       {adding && (
-        <form className="add-form" onSubmit={handleAdd}>
+        <form className="add-form" onSubmit={handleAdd} data-help="epg-source-form">
           <h3 className="form-title">Add EPG Source (XMLTV)</h3>
           <input className="form-input" placeholder="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} required />
           <input className="form-input" placeholder="XMLTV URL" value={form.url} onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))} required />
@@ -328,7 +341,7 @@ function EpgSettings() {
               </div>
             </div>
             <div className="playlist-actions">
-              <button className="pl-btn danger" onClick={() => removeSource(src.id)}>Remove</button>
+              <button className="pl-btn danger" onClick={() => removeSource(src.id)} data-help="epg-remove">Remove</button>
             </div>
           </div>
         ))}

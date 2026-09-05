@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Outlet, useNavigate } from 'react-router-dom'
+import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { platform } from '@tauri-apps/plugin-os'
 import { usePlaylistStore } from '../../store/slices/playlistSlice'
@@ -27,6 +27,7 @@ let splashDismissed = false
 
 export default function MainLayout() {
   const navigate = useNavigate()
+  const location = useLocation()
   const loadPlaylists = usePlaylistStore((s) => s.loadPlaylists)
   const playlistsLoaded = usePlaylistStore((s) => s.playlistsLoaded)
   const playlists = usePlaylistStore((s) => s.playlists)
@@ -70,10 +71,10 @@ export default function MainLayout() {
 
   // Redirect to login if no playlists exist after loading
   useEffect(() => {
-    if (playlistsLoaded && playlists.length === 0) {
-      navigate('/login', { replace: true })
+    if (playlistsLoaded && playlists.length === 0 && location.pathname !== '/help') {
+      navigate('/login', { replace: true, state: location.state })
     }
-  }, [playlistsLoaded, playlists.length, navigate])
+  }, [playlistsLoaded, playlists.length, location.pathname, location.state, navigate])
 
   useEffect(() => {
     if (!playlistsLoaded) return

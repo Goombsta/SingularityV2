@@ -1,5 +1,6 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { useHelp } from '../help/HelpProvider'
 import { usePlaylistStore } from '../store/slices/playlistSlice'
 import './LoginScreen.css'
 
@@ -7,7 +8,9 @@ type PlaylistType = 'xtream' | 'm3u' | 'stalker'
 
 export default function LoginScreen() {
   const navigate = useNavigate()
-  const { addXtream, addM3u, addStalker, status } = usePlaylistStore()
+  const location = useLocation()
+  const { startGuide, exitGuide } = useHelp()
+  const { addXtream, addM3u, addStalker, status, playlists, playlistsLoaded } = usePlaylistStore()
 
   const [type, setType] = useState<PlaylistType>('xtream')
   const [name, setName] = useState('')
@@ -16,6 +19,21 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('')
   const [mac, setMac] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const autoGuideStarted = useRef(false)
+
+  useEffect(() => {
+    const requestedType = (location.state as { helpHandoff?: { setupType?: PlaylistType } } | null)?.helpHandoff?.setupType
+    if (requestedType === 'xtream' || requestedType === 'm3u') {
+      setType(requestedType)
+      setError(null)
+    }
+  }, [location.state])
+
+  useEffect(() => {
+    if (!playlistsLoaded || playlists.length !== 0 || autoGuideStarted.current) return
+    autoGuideStarted.current = true
+    startGuide('xtream-setup', { keepCurrentRoute: true })
+  }, [playlistsLoaded, playlists.length, startGuide])
 
   const loading = status === 'loading'
 
@@ -37,6 +55,7 @@ export default function LoginScreen() {
         }
         await addStalker(displayName, url.trim(), mac.trim())
       }
+      exitGuide()
       navigate('/', { replace: true })
     } catch (e) {
       setError(String(e))
@@ -48,9 +67,10 @@ export default function LoginScreen() {
       <div className="login-card">
         <div className="login-logo">SINGULARITY DEUX</div>
         <p className="login-subtitle">Add your playlist to get started</p>
+        <button className="login-help-link" onClick={() => { exitGuide(); navigate('/help') }}>Need help adding a playlist?</button>
 
         {/* Type selector */}
-        <div className="login-type-tabs">
+        <div className="login-type-tabs" data-help="login-type-tabs">
           {(['xtream', 'm3u', 'stalker'] as PlaylistType[]).map((t) => (
             <button
               key={t}
@@ -63,7 +83,7 @@ export default function LoginScreen() {
         </div>
 
         {/* Fields */}
-        <div className="login-fields">
+        <div className="login-fields" data-help="playlist-setup-form">
           <input
             className="login-input"
             placeholder="Playlist name (optional)"
@@ -112,6 +132,7 @@ export default function LoginScreen() {
           className="login-connect-btn"
           onClick={handleConnect}
           disabled={loading}
+          data-help="playlist-connect"
         >
           {loading ? 'Connecting...' : 'Connect'}
         </button>

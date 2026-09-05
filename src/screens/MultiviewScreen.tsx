@@ -570,7 +570,7 @@ export default function MultiviewScreen() {
           </div>
 
           <div className="mv-cat-label">LAYOUT</div>
-          <div className="mv-cat-layouts">
+          <div className="mv-cat-layouts" data-help="multiview-layouts">
             {(['2H', '2V', '3', '4'] as MultiviewLayout[]).map((l) => (
               <button
                 key={l}
@@ -622,7 +622,7 @@ export default function MultiviewScreen() {
 
         {/* ── Channel list panel ── */}
         {targetCell !== null && (
-          <aside className="mv-channel-panel">
+          <aside className="mv-channel-panel" data-help="multiview-channel-picker">
             <div className="mv-ch-panel-header">
               <span>Assign to Panel {targetCell + 1}</span>
               <button className="mv-ch-panel-close" onClick={() => setTargetCell(null)}>✕</button>

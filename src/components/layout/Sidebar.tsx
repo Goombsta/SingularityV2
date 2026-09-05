@@ -14,7 +14,7 @@ const NAV_ITEMS = [
 
 export default function Sidebar() {
   return (
-    <aside className="sidebar">
+    <aside className="sidebar" data-help="app-sidebar">
       <div className="sidebar-logo">
         <img src="/logo.png" alt="Singularity" className="logo-mark" />
       </div>
@@ -34,6 +34,9 @@ export default function Sidebar() {
       </nav>
 
       <div className="sidebar-bottom">
+        <NavLink to="/help" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} data-label="Help">
+          <span className="help-nav-label">Help</span>
+        </NavLink>
         <NavLink to="/settings" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} data-label="Settings">
           <SettingsIcon />
         </NavLink>

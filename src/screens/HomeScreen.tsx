@@ -261,7 +261,7 @@ export default function HomeScreen() {
   }
 
   return (
-    <div className="home-screen">
+    <div className="home-screen" data-help="home-navigation">
       {heroItems.length > 0 && (
         <HeroBanner
           items={heroItems}

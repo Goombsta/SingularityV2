@@ -326,7 +326,7 @@ export default function VodScreen() {
                 <p className="detail-awards">🏆 {omdb.awards}</p>
               )}
 
-              <div className="detail-actions">
+              <div className="detail-actions" data-help="movie-details">
                 {selected.stream_url ? (
                   <button className="detail-pill-btn primary"
                     onClick={() => navigate('/player', { state: { url: selected.stream_url, title: cleanTitle, live: false, resumeKey: `playlist:${selected.playlist_id}:vod:${selected.id}`, posterUrl: displayPoster } })}>
@@ -402,6 +402,7 @@ export default function VodScreen() {
           </div>
           <input
             className="search-input"
+            data-help="movie-search"
             placeholder="Search…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -441,6 +442,7 @@ export default function VodScreen() {
         </div>
         <input
           className="search-input"
+          data-help="movie-search"
           placeholder="Search movies…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
