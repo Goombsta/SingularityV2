@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import Hls from 'hls.js'
 import mpegts from 'mpegts.js'
 import { invoke } from '@tauri-apps/api/core'
+import { platform } from '@tauri-apps/plugin-os'
 import { usePlaylistStore } from '../store/slices/playlistSlice'
 import PlaylistPicker from '../components/common/PlaylistPicker'
 import type { Channel } from '../types'
@@ -24,13 +25,23 @@ function makeProxyLoader(proxyPort: number): any {
 
 type MultiviewLayout = '2H' | '2V' | '3' | '4'
 
+let _multiviewPlatform: string | null = null
+function getMultiviewPlatform(): string {
+  if (_multiviewPlatform === null) {
+    try { _multiviewPlatform = platform() } catch { _multiviewPlatform = 'unknown' }
+  }
+  return _multiviewPlatform
+}
+
+const MULTIVIEW_VOLUME_MAX = getMultiviewPlatform() === 'windows' ? 3.0 : 1.0
+
 const LAYOUT_CELL_COUNT: Record<MultiviewLayout, number> = {
   '2H': 2, '2V': 2, '3': 3, '4': 4,
 }
 
 function makeCells(count: number, startId = 0): CellState[] {
   return Array.from({ length: count }, (_, i) => ({
-    id: startId + i, url: '', title: '', reconnecting: false,
+    id: startId + i, url: '', title: '', reconnecting: false, volume: 1,
   }))
 }
 
@@ -39,6 +50,7 @@ interface CellState {
   url: string
   title: string
   reconnecting: boolean
+  volume: number
 }
 
 function Icon2H() {
@@ -105,6 +117,11 @@ export default function MultiviewScreen() {
   const videoRefs = useRef<(HTMLVideoElement | null)[]>([null, null, null, null])
   const hlsInstances = useRef<(Hls | null)[]>([null, null, null, null])
   const mpegtsInstances = useRef<(any | null)[]>([null, null, null, null])
+  const audioCtxInstances = useRef<(AudioContext | null)[]>([null, null, null, null])
+  const audioSrcInstances = useRef<(MediaElementAudioSourceNode | null)[]>([null, null, null, null])
+  const gainNodeInstances = useRef<(GainNode | null)[]>([null, null, null, null])
+  const compressorInstances = useRef<(DynamicsCompressorNode | null)[]>([null, null, null, null])
+  const boostedVideoRefs = useRef<(HTMLVideoElement | null)[]>([null, null, null, null])
   const reconnectTimers = useRef<(ReturnType<typeof setTimeout> | null)[]>([null, null, null, null])
   const stallTimers = useRef<(ReturnType<typeof setTimeout> | null)[]>([null, null, null, null])
   const loadedUrls = useRef<string[]>(['', '', '', ''])
@@ -121,14 +138,91 @@ export default function MultiviewScreen() {
   useEffect(() => { cellsRef.current = cells }, [cells])
   useEffect(() => { activeCellRef.current = activeCell }, [activeCell])
 
-  // Imperatively sync muted state when active cell changes.
+  const cleanupCellAudioBoost = (cellId: number) => {
+    try { audioSrcInstances.current[cellId]?.disconnect() } catch {}
+    try { gainNodeInstances.current[cellId]?.disconnect() } catch {}
+    try { compressorInstances.current[cellId]?.disconnect() } catch {}
+    try { audioCtxInstances.current[cellId]?.close() } catch {}
+    audioCtxInstances.current[cellId] = null
+    audioSrcInstances.current[cellId] = null
+    gainNodeInstances.current[cellId] = null
+    compressorInstances.current[cellId] = null
+    boostedVideoRefs.current[cellId] = null
+  }
+
+  const syncBoostedCellAudio = (cellId: number, volume: number, muted: boolean) => {
+    const video = videoRefs.current[cellId]
+    const gain = gainNodeInstances.current[cellId]
+    if (!video || !gain) return
+    if (audioCtxInstances.current[cellId]?.state === 'suspended') {
+      audioCtxInstances.current[cellId]?.resume().catch(() => {})
+    }
+    gain.gain.value = muted ? 0 : volume
+    video.volume = 1.0
+    // Keep the element unmuted when routed through Web Audio; gain=0 handles mute.
+    video.muted = false
+  }
+
+  const ensureCellAudioBoost = (cellId: number, volume: number, muted: boolean) => {
+    if (MULTIVIEW_VOLUME_MAX <= 1.0) return
+    const video = videoRefs.current[cellId]
+    if (!video) return
+
+    if (audioSrcInstances.current[cellId] && boostedVideoRefs.current[cellId] === video) {
+      syncBoostedCellAudio(cellId, volume, muted)
+      return
+    }
+
+    cleanupCellAudioBoost(cellId)
+    try {
+      const ctx = new AudioContext()
+      const src = ctx.createMediaElementSource(video)
+      const gain = ctx.createGain()
+      const compressor = ctx.createDynamicsCompressor()
+      compressor.threshold.value = -3
+      compressor.knee.value = 0
+      compressor.ratio.value = 20
+      compressor.attack.value = 0.003
+      compressor.release.value = 0.08
+      src.connect(gain)
+      gain.connect(compressor)
+      compressor.connect(ctx.destination)
+      audioCtxInstances.current[cellId] = ctx
+      audioSrcInstances.current[cellId] = src
+      gainNodeInstances.current[cellId] = gain
+      compressorInstances.current[cellId] = compressor
+      boostedVideoRefs.current[cellId] = video
+      syncBoostedCellAudio(cellId, volume, muted)
+    } catch (err) {
+      cleanupCellAudioBoost(cellId)
+      console.warn('[Multiview] Web Audio setup failed, falling back to native volume', err)
+      video.volume = Math.min(volume, 1.0)
+      video.muted = muted
+    }
+  }
+
+  const syncCellAudio = (cellId: number, volume: number, muted: boolean) => {
+    const video = videoRefs.current[cellId]
+    if (!video) return
+
+    const hasBoostPath = gainNodeInstances.current[cellId] !== null
+    if (hasBoostPath || (volume > 1.0 && cellId === activeCellRef.current)) {
+      ensureCellAudioBoost(cellId, volume, muted)
+      return
+    }
+
+    video.volume = Math.min(volume, 1.0)
+    video.muted = muted
+  }
+
+  // Imperatively sync mute and volume state when active cell or panel volume changes.
   // React's muted prop is broken (React #6544) — it doesn't reflect to the DOM attribute,
   // so we must set video.muted directly.
   useEffect(() => {
-    videoRefs.current.forEach((video, id) => {
-      if (video) video.muted = id !== activeCell
+    cells.forEach((cell) => {
+      syncCellAudio(cell.id, cell.volume, cell.id !== activeCell || cell.volume <= 0)
     })
-  }, [activeCell])
+  }, [activeCell, cells])
 
   useEffect(() => {
     invoke<number | null>('get_proxy_port')
@@ -181,7 +275,8 @@ export default function MultiviewScreen() {
       video.muted = true
       Promise.resolve(video.play()).catch(() => {})
       video.addEventListener('playing', () => {
-        video.muted = cellId !== activeCellRef.current
+        const volume = cellsRef.current[cellId]?.volume ?? 1
+        syncCellAudio(cellId, volume, cellId !== activeCellRef.current || volume <= 0)
       }, { once: true })
     }
 
@@ -324,6 +419,7 @@ export default function MultiviewScreen() {
     reconnectTimers.current.forEach((t) => t && clearTimeout(t))
     hlsInstances.current.forEach((h) => h?.destroy())
     mpegtsInstances.current.forEach((p) => p?.destroy())
+    audioCtxInstances.current.forEach((_, id) => cleanupCellAudioBoost(id))
   }, [])
 
   // ── Inactivity collapse: after 5s of no mouse activity on the panels, collapse ──
@@ -391,6 +487,24 @@ export default function MultiviewScreen() {
     ))
     setUrlInput('')
     setShowUrlInput(false)
+  }
+
+  const handleCellVolumeChange = (cellId: number, volume: number) => {
+    const nextVolume = Math.max(0, Math.min(MULTIVIEW_VOLUME_MAX, volume))
+    setCells((prev) => prev.map((cell) =>
+      cell.id === cellId ? { ...cell, volume: nextVolume } : cell
+    ))
+    syncCellAudio(cellId, nextVolume, cellId !== activeCellRef.current || nextVolume <= 0)
+  }
+
+  const selectCell = (cellId: number) => {
+    // Keep the ref in sync immediately so a user click can resume a suspended
+    // Web Audio context for a boosted panel before React effects run.
+    activeCellRef.current = cellId
+    setActiveCell(cellId)
+    cellsRef.current.forEach((cell) => {
+      syncCellAudio(cell.id, cell.volume, cell.id !== cellId || cell.volume <= 0)
+    })
   }
 
   const openPanel = (cellId: number) => {
@@ -583,7 +697,7 @@ export default function MultiviewScreen() {
             <div
               key={cell.id}
               className={`mv-cell${cell.id === activeCell ? ' active' : ''}${targetCell === cell.id ? ' targeted' : ''}`}
-              onClick={() => setActiveCell(cell.id)}
+              onClick={() => selectCell(cell.id)}
             >
               {cell.url ? (
                 <>
@@ -602,6 +716,21 @@ export default function MultiviewScreen() {
                     onError={() => handleStalled(cell.id)}
                   />
                   {cell.title && <div className="mv-cell-label">{cell.title}</div>}
+                  <div className="mv-cell-volume-controls" onClick={(e) => e.stopPropagation()}>
+                    <span className="mv-cell-volume-icon" aria-hidden="true">{cell.volume === 0 ? '🔇' : '🔊'}</span>
+                    <input
+                      id={`mv-volume-${cell.id}`}
+                      type="range"
+                      className="mv-cell-volume-slider"
+                      min={0}
+                      max={MULTIVIEW_VOLUME_MAX}
+                      step={MULTIVIEW_VOLUME_MAX > 1 ? 0.05 : 0.01}
+                      value={cell.volume}
+                      aria-label={`Panel ${cell.id + 1} volume`}
+                      onChange={(e) => handleCellVolumeChange(cell.id, Number(e.target.value))}
+                    />
+                    <span className={`mv-cell-volume-value${cell.volume > 1 ? ' boosted' : ''}`}>{Math.round(cell.volume * 100)}%</span>
+                  </div>
                   {cell.reconnecting && (
                     <div className="mv-reconnect-badge">
                       <span className="mv-reconnect-spinner" />
