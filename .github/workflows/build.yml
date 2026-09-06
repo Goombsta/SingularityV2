@@ -228,6 +228,7 @@ jobs:
           set -euo pipefail
           CONFIG="src-tauri/gen/android/app/src/main/assets/tauri.conf.json"
           ASSET="src-tauri/gen/android/app/src/main/assets/libmpv-2.dll"
+          if [ -f "$CONFIG" ]; then
           python3 - "$CONFIG" <<'PYEOF'
           import json
           import sys
@@ -238,6 +239,7 @@ jobs:
           config.setdefault("bundle", {}).pop("resources", None)
           path.write_text(json.dumps(config, separators=(",", ":")))
           PYEOF
+          fi
           rm -f "$ASSET"
           if grep -R -n -F "libmpv-2.dll" "src-tauri/gen/android/app/src/main/assets"; then
             echo "ERROR: Windows libmpv-2.dll still appears in Android assets"
