@@ -17,4 +17,4 @@ e28cb9e0f456caf8498d0e8562b3ac3f73bf78c07555a52b5602396f240abec3  src-tauri/andr
 d2a2a70327cab8e9b88ba6249fd7ca71d7d663846a540ad76562b2d13855172f  src-tauri/android-plugin/jniLibs/x86_64/libmpv.so
 20e822da00b4e1f20f240c60c9005f9c57d8202f640777d4eb0d2362e077bf6c  src-tauri/android-plugin/jniLibs/x86_64/libplayer.so
 df528c5599c278d7883fd2e64b329bac7d9e58da82aaa529d28aa8e10b554850  src-tauri/android-plugin/jniLibs/x86_64/libswresample.so
-e9b09e12be23d59525c836b8e92ac40250c63b3557de99748e571b5500520c8a  src-tauri/android-plugin/jniLibs/x86_64/libswscale.so
+e9b09e12be23d59525c836b8e92ac40250d63b3557de99748e571b5500520c8a  src-tauri/android-plugin/jniLibs/x86_64/libswscale.so
