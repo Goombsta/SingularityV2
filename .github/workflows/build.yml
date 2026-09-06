@@ -109,6 +109,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          lfs: true
 
       - name: Setup Node 20
         uses: actions/setup-node@v4
@@ -179,6 +181,44 @@ jobs:
           echo "Plugin files copied:"
           ls -la "$DEST/"
           ls -la "$MPV_LIB_DEST/"
+
+      - name: Copy pinned MPV native libraries
+        run: |
+          set -euo pipefail
+          SRC="src-tauri/android-plugin/jniLibs"
+          DEST="src-tauri/gen/android/app/src/main/jniLibs"
+          test -d "$SRC"
+          sha256sum -c "$SRC/SHA256SUMS.txt"
+          rm -rf "$DEST"
+          mkdir -p "$DEST"
+          cp -R "$SRC"/. "$DEST"/
+          for ABI in arm64-v8a x86_64; do
+            test -s "$DEST/$ABI/libmpv.so"
+            test -s "$DEST/$ABI/libplayer.so"
+          done
+          echo "Pinned MPV libraries copied:"
+          find "$DEST" -type f -printf '%p %s bytes\n' | sort
+
+      - name: Remove desktop resources from Android bundle
+        run: |
+          set -euo pipefail
+          CONFIG="src-tauri/gen/android/app/src/main/assets/tauri.conf.json"
+          ASSET="src-tauri/gen/android/app/src/main/assets/libmpv-2.dll"
+          python3 - "$CONFIG" <<'PYEOF'
+          import json
+          import sys
+          from pathlib import Path
+
+          path = Path(sys.argv[1])
+          config = json.loads(path.read_text())
+          config.setdefault("bundle", {}).pop("resources", None)
+          path.write_text(json.dumps(config, separators=(",", ":")))
+          PYEOF
+          rm -f "$ASSET"
+          if grep -R -n -F "libmpv-2.dll" "src-tauri/gen/android/app/src/main/assets"; then
+            echo "ERROR: Windows libmpv-2.dll still appears in Android assets"
+            exit 1
+          fi
 
       - name: Write MainActivity (edge-to-edge only; plugins registered from Rust)
         run: |
@@ -292,7 +332,7 @@ jobs:
         run: python3 scripts/patch_signing.py src-tauri/gen/android/app/build.gradle.kts
 
       - name: Build Tauri Android (APK, release)
-        run: npm run tauri android build -- --apk
+        run: npm run tauri android build -- --apk --target aarch64 --target x86_64 --split-per-abi --ci
         env:
           NDK_HOME: ${{ env.NDK_HOME }}
           KEYSTORE_PATH: ${{ env.KEYSTORE_PATH }}
@@ -302,20 +342,40 @@ jobs:
 
       - name: Collect and verify APK
         run: |
-          APK=$(find src-tauri/gen/android/app/build/outputs/apk/universal/release \
-                     src-tauri/gen/android/app/build/outputs/apk/release \
-                     src-tauri/gen/android/app/build/outputs/apk \
-                     -name "*.apk" 2>/dev/null | grep -v unsigned | head -1)
-          echo "Found APK: $APK"
-          cp "$APK" /tmp/SingularityV2.apk
+          set -euo pipefail
+          OUT="/tmp/singularity-apks"
+          mkdir -p "$OUT"
           BUILD_TOOLS=$(ls -d $ANDROID_SDK_ROOT/build-tools/* | sort -V | tail -1)
-          $BUILD_TOOLS/apksigner verify --verbose /tmp/SingularityV2.apk && echo "Verification OK"
+          for ABI in arm64-v8a x86_64; do
+            APK=$(find src-tauri/gen/android/app/build/outputs/apk -type f -name "*${ABI}*.apk" 2>/dev/null | grep -v unsigned | head -1 || true)
+            if [ -z "$APK" ]; then
+              echo "ERROR: no split APK found for $ABI"
+              find src-tauri/gen/android/app/build/outputs/apk -type f -name '*.apk' -print || true
+              exit 1
+            fi
+            DEST="$OUT/SingularityV2-${ABI}.apk"
+            cp "$APK" "$DEST"
+            echo "Checking $DEST"
+            ZIP_LIST=$(unzip -l "$DEST")
+            if printf '%s\n' "$ZIP_LIST" | grep -Eiq '(^|/)libmpv-2\.dll$|git-lfs\.github\.com/spec/v1'; then
+              echo "ERROR: desktop DLL or Git LFS pointer found in $DEST"
+              exit 1
+            fi
+            for LIB in libmpv.so libplayer.so; do
+              if ! printf '%s\n' "$ZIP_LIST" | grep -Fq "lib/${ABI}/${LIB}"; then
+                echo "ERROR: missing lib/${ABI}/${LIB} in $DEST"
+                exit 1
+              fi
+            done
+            "$BUILD_TOOLS/apksigner" verify --verbose "$DEST"
+          done
+          echo "All Android APK checks passed"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: singularity-android-apk
-          path: /tmp/SingularityV2.apk
+          path: /tmp/singularity-apks/*.apk
           if-no-files-found: error
 
   # ───────────────────────────────────────────────────────────────────────────
@@ -362,7 +422,8 @@ jobs:
             |----------|------|
             | Windows (installer) | `Singularity Setup_*.exe` |
             | Windows (MSI) | `Singularity Setup_*.msi` |
-            | Android | `*.apk` |
+            | Android (ARM64) | `SingularityV2-arm64-v8a.apk` |
+            | Android (x86_64) | `SingularityV2-x86_64.apk` |
 
             ### Install
             - **Windows**: Run the `.exe` installer or the `.msi` package

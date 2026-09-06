@@ -50,6 +50,10 @@ Add your favorite streams through multiple formats:
 - Vite + React 18 frontend for instant feedback
 - Optimized bundle size and startup time
 
+## v0.6.4 Android Release Packaging
+- **Architecture-specific APKs** — Release builds publish ARM64 and x86_64 APKs instead of bundling unrelated architectures.
+- **Native media verification** — CI verifies that MPV libraries are present and desktop-only resources are excluded before release.
+
 ## v0.6.3 Multiview Audio Controls
 - **Per-panel volume** — Each Multiview panel now has an independent volume slider and mute state.
 - **Windows boost** — Windows desktop panels support volume from 0% through 300% using the Live TV gain and limiter path.
@@ -73,6 +77,6 @@ Add your favorite streams through multiple formats:
 
 ---
 
-**Current Version:** 0.6.3
+**Current Version:** 0.6.4
 **Platforms:** Android 7.0+, Windows 10+  
 **Built with:** Tauri 2.0 | React 18 | Rust | TypeScript

@@ -1,4 +1,10 @@
-# Singularity v0.6.3
+# Singularity v0.6.4
+
+## Android release packaging
+
+- Corrected Android packaging so the Windows `libmpv-2.dll` is not included in APKs.
+- Restored the tested MPV/FFmpeg native libraries to clean GitHub Actions builds.
+- Published architecture-specific `arm64-v8a` and `x86_64` APKs with native-library and signature verification.
 
 ## What's new
 
@@ -10,9 +16,10 @@
 
 | Platform | File |
 | --- | --- |
-| Windows installer | `Singularity Setup_0.6.3_x64-setup.exe` |
-| Windows MSI | `Singularity Setup_0.6.3_x64.msi` |
-| Android | `*.apk` |
+| Windows installer | `Singularity Setup_0.6.4_x64-setup.exe` |
+| Windows MSI | `Singularity Setup_0.6.4_x64.msi` |
+| Android (ARM64) | `SingularityV2-arm64-v8a.apk` |
+| Android (x86_64) | `SingularityV2-x86_64.apk` |
 
 ## Install
 

@@ -1,12 +1,12 @@
 {
-  "version": "0.6.3",
+  "version": "0.6.4",
   "android": {
-    "version": "0.6.3",
+    "version": "0.6.4",
     "url": "https://www.singularitytv.app/downloads/Singularitydeux.apk",
     "notes": ""
   },
   "desktop": {
-    "version": "0.6.3",
+    "version": "0.6.4",
     "url": "https://www.singularitytv.app/downloads/Singularitydeux.Setup.exe",
     "notes": ""
   },
