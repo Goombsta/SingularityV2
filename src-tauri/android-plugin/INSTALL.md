@@ -41,13 +41,16 @@ Do not rely on a previously generated `src-tauri/gen/android` directory. `tauri 
 
 The complete CI/release contract, including resource exclusion, LFS hydration, ABI selection, signing, and APK verification, is documented in [`docs/ANDROID-RELEASE.md`](../../docs/ANDROID-RELEASE.md).
 
-For the release workflow, do not add a multi-ABI `abiFilters` override: it causes every
-`--split-per-abi` APK to contain both architectures. The checked-in `jniLibs` directories
-and the Tauri command below select the supported ABIs and produce one APK per ABI:
+For the release workflow, do not add a multi-ABI `abiFilters` override or build both targets
+from one shared `jniLibs` directory: either can make every APK contain both architectures.
+Stage one checked-in ABI directory at a time, then run its matching Tauri target:
 
 ```sh
-npm run tauri android build -- --apk \
-  --target aarch64 --target x86_64 --split-per-abi --ci
+# with jniLibs/arm64-v8a staged:
+npm run tauri android build -- --apk --target aarch64 --ci
+
+# with jniLibs/x86_64 staged:
+npm run tauri android build -- --apk --target x86_64 --ci
 ```
 
 If `CredentialPlugin.kt` is enabled for a local build, keep its AndroidX security dependency as well:

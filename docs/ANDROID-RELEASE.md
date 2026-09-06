@@ -37,17 +37,26 @@ The Android job in `.github/workflows/build.yml` must perform these steps in ord
 5. Copy the Kotlin plugin files and the pinned Android `jniLibs` bundle into the generated project.
 6. Remove the desktop `libmpv-2.dll` resource from the Android configuration/assets. Windows keeps this resource; Android does not.
 7. Apply signing configuration from GitHub Secrets. Never use local keystore paths or fallback passwords in CI.
-8. Build only the supported Android targets. The standard direct-download command is:
+8. Build each supported Android target with only its matching native-library directory in
+   `src-tauri/gen/android/app/src/main/jniLibs/`:
 
    ```bash
-   npm run tauri android build -- --apk \
-     --target aarch64 \
-     --target x86_64 \
-     --split-per-abi \
-     --ci
+   rm -rf src-tauri/gen/android/app/src/main/jniLibs
+   mkdir -p src-tauri/gen/android/app/src/main/jniLibs
+   cp -R src-tauri/android-plugin/jniLibs/arm64-v8a \
+     src-tauri/gen/android/app/src/main/jniLibs/
+   npm run tauri android build -- --apk --target aarch64 --ci
+
+   rm -rf src-tauri/gen/android/app/src/main/jniLibs
+   mkdir -p src-tauri/gen/android/app/src/main/jniLibs
+   cp -R src-tauri/android-plugin/jniLibs/x86_64 \
+     src-tauri/gen/android/app/src/main/jniLibs/
+   npm run tauri android build -- --apk --target x86_64 --ci
    ```
 
-   Tauri's `--split-per-abi` option avoids shipping unrelated native binaries in each download. For Google Play, build an AAB and let Play deliver the device-specific split.
+   Building both targets from one shared `jniLibs` directory makes every APK fat, even
+   when `--split-per-abi` is supplied. For Google Play, build an AAB and let Play deliver
+   the device-specific split.
 
 9. Verify every generated APK before uploading it:
 

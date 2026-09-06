@@ -352,7 +352,37 @@ jobs:
         run: python3 scripts/patch_signing.py src-tauri/gen/android/app/build.gradle.kts
 
       - name: Build Tauri Android (APK, release)
-        run: npm run tauri android build -- --apk --target aarch64 --target x86_64 --split-per-abi --ci
+        run: |
+          set -euo pipefail
+          SRC="src-tauri/android-plugin/jniLibs"
+          DEST="src-tauri/gen/android/app/src/main/jniLibs"
+          OUT="/tmp/singularity-apks"
+          rm -rf "$OUT"
+          mkdir -p "$OUT"
+
+          build_one() {
+            TARGET="$1"
+            ABI="$2"
+            SHORT="$3"
+            echo "Building Android target $TARGET from $ABI libraries"
+            rm -rf "$DEST"
+            mkdir -p "$DEST"
+            cp -R "$SRC/$ABI" "$DEST/"
+            npm run tauri android build -- --apk --target "$TARGET" --ci
+            APK=$(find src-tauri/gen/android/app/build/outputs/apk -type f \
+              -name "app-${SHORT}-release.apk" | head -n 1 || true)
+            if [ -z "$APK" ]; then
+              echo "ERROR: no signed APK found for $ABI"
+              find src-tauri/gen/android/app/build/outputs/apk -type f -name '*.apk' -print || true
+              exit 1
+            fi
+            cp "$APK" "$OUT/SingularityV2-${ABI}.apk"
+          }
+
+          # Build each target with only its matching native-library directory.
+          # A shared multi-ABI jniLibs directory makes every split APK fat.
+          build_one aarch64 arm64-v8a arm64
+          build_one x86_64 x86_64 x86_64
         env:
           NDK_HOME: ${{ env.NDK_HOME }}
           KEYSTORE_PATH: ${{ env.KEYSTORE_PATH }}
@@ -367,15 +397,13 @@ jobs:
           mkdir -p "$OUT"
           BUILD_TOOLS=$(ls -d $ANDROID_SDK_ROOT/build-tools/* | sort -V | tail -1)
           python3 - "$BUILD_TOOLS/apksigner" "$OUT" <<'PYEOF'
-          import shutil
           import subprocess
           import sys
           import zipfile
           from pathlib import Path
 
           apksigner = Path(sys.argv[1])
-          out = Path(sys.argv[2])
-          apk_root = Path("src-tauri/gen/android/app/build/outputs/apk")
+          apk_root = Path(sys.argv[2])
           expected = {"arm64-v8a": None, "x86_64": None}
 
           for apk in sorted(apk_root.rglob("*.apk")):
@@ -408,14 +436,12 @@ jobs:
           missing = [abi for abi, apk in expected.items() if apk is None]
           if missing:
               print("APK candidates:")
-              for apk in sorted(apk_root.rglob("*.apk")):
+              for apk in sorted(apk_root.glob("*.apk")):
                   print(apk)
               raise SystemExit(f"ERROR: no signed split APK found for {', '.join(missing)}")
 
           for abi, apk in expected.items():
-              destination = out / f"SingularityV2-{abi}.apk"
-              shutil.copy2(apk, destination)
-              print(f"Verified {abi}: {destination}")
+              print(f"Verified {abi}: {apk}")
           print("All Android APK checks passed")
           PYEOF
 
