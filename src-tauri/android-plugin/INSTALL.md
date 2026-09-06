@@ -31,7 +31,7 @@ class MainActivity : TauriActivity() {
 
 ### 4. Provide the MPV native libraries
 
-`MPVLib.kt` loads the native libraries named `mpv` and `player`. A clean checkout must copy the pinned Android `jniLibs` bundle into:
+`MPVLib.kt` loads the native libraries named `mpv` and `player`. A clean checkout must copy the pinned Android `jniLibs` bundle (ordinary Git blobs, with `SHA256SUMS.txt`) into:
 
 ```text
 src-tauri/gen/android/app/src/main/jniLibs/

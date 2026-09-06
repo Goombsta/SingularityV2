@@ -109,8 +109,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          lfs: true
 
       - name: Setup Node 20
         uses: actions/setup-node@v4
@@ -188,7 +186,6 @@ jobs:
           SRC="src-tauri/android-plugin/jniLibs"
           DEST="src-tauri/gen/android/app/src/main/jniLibs"
           test -d "$SRC"
-          git lfs checkout
           python3 - "$SRC/SHA256SUMS.txt" <<'PYEOF'
           import hashlib
           import sys
