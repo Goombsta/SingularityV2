@@ -29,20 +29,32 @@ class MainActivity : TauriActivity() {
 }
 ```
 
-### 4. Add dependencies to app/build.gradle
-```groovy
-dependencies {
-    // MPV for Android (mpv-android prebuilt)
-    implementation 'is.xyz.mpv:mpv-android:0.38.0'
-    // Encrypted credentials
-    implementation 'androidx.security:security-crypto:1.1.0-alpha06'
-}
+### 4. Provide the MPV native libraries
 
+`MPVLib.kt` loads the native libraries named `mpv` and `player`. A clean checkout must copy the pinned Android `jniLibs` bundle into:
+
+```text
+src-tauri/gen/android/app/src/main/jniLibs/
+```
+
+Do not rely on a previously generated `src-tauri/gen/android` directory. `tauri android init` regenerates it, and the release workflow must populate `jniLibs` on every run. Do not add `is.xyz.mpv:mpv-android` as a normal Gradle dependency without verifying the exact artifact; the [upstream mpv-android project](https://github.com/mpv-android/mpv-android) is an application rather than an importable AAR.
+
+The complete CI/release contract, including resource exclusion, LFS hydration, ABI selection, signing, and APK verification, is documented in [`docs/ANDROID-RELEASE.md`](../../docs/ANDROID-RELEASE.md).
+
+Keep the Android build limited to the ABIs for which both Rust and MPV libraries are present:
+
+```groovy
 android {
     defaultConfig {
         ndk { abiFilters "arm64-v8a", "x86_64" }
     }
 }
+```
+
+If `CredentialPlugin.kt` is enabled for a local build, keep its AndroidX security dependency as well:
+
+```groovy
+implementation 'androidx.security:security-crypto:1.1.0-alpha06'
 ```
 
 ### 5. Make WebView background transparent
