@@ -372,30 +372,52 @@ jobs:
           OUT="/tmp/singularity-apks"
           mkdir -p "$OUT"
           BUILD_TOOLS=$(ls -d $ANDROID_SDK_ROOT/build-tools/* | sort -V | tail -1)
-          for ABI in arm64-v8a x86_64; do
-            APK=$(find src-tauri/gen/android/app/build/outputs/apk -type f -name "*${ABI}*.apk" 2>/dev/null | grep -v unsigned | head -1 || true)
-            if [ -z "$APK" ]; then
-              echo "ERROR: no split APK found for $ABI"
-              find src-tauri/gen/android/app/build/outputs/apk -type f -name '*.apk' -print || true
-              exit 1
-            fi
-            DEST="$OUT/SingularityV2-${ABI}.apk"
-            cp "$APK" "$DEST"
-            echo "Checking $DEST"
-            ZIP_LIST=$(unzip -l "$DEST")
-            if printf '%s\n' "$ZIP_LIST" | grep -Eiq '(^|/)libmpv-2\.dll$|git-lfs\.github\.com/spec/v1'; then
-              echo "ERROR: desktop DLL or Git LFS pointer found in $DEST"
-              exit 1
-            fi
-            for LIB in libmpv.so libplayer.so; do
-              if ! printf '%s\n' "$ZIP_LIST" | grep -Fq "lib/${ABI}/${LIB}"; then
-                echo "ERROR: missing lib/${ABI}/${LIB} in $DEST"
-                exit 1
-              fi
-            done
-            "$BUILD_TOOLS/apksigner" verify --verbose "$DEST"
-          done
-          echo "All Android APK checks passed"
+          python3 - "$BUILD_TOOLS/apksigner" "$OUT" <<'PYEOF'
+          import shutil
+          import subprocess
+          import sys
+          import zipfile
+          from pathlib import Path
+
+          apksigner = Path(sys.argv[1])
+          out = Path(sys.argv[2])
+          apk_root = Path("src-tauri/gen/android/app/build/outputs/apk")
+          expected = {"arm64-v8a": None, "x86_64": None}
+
+          for apk in sorted(apk_root.rglob("*.apk")):
+              if "unsigned" in apk.name.lower():
+                  continue
+              with zipfile.ZipFile(apk) as archive:
+                  names = set(archive.namelist())
+              if "libmpv-2.dll" in names or any(
+                  name.endswith("git-lfs.github.com/spec/v1") for name in names
+              ):
+                  raise SystemExit(f"ERROR: desktop DLL or Git LFS pointer found in {apk}")
+              matches = [abi for abi in expected if f"lib/{abi}/libmpv.so" in names]
+              if len(matches) != 1:
+                  continue
+              abi = matches[0]
+              for library in ("libmpv.so", "libplayer.so"):
+                  if f"lib/{abi}/{library}" not in names:
+                      raise SystemExit(f"ERROR: missing lib/{abi}/{library} in {apk}")
+              if expected[abi] is not None:
+                  raise SystemExit(f"ERROR: multiple signed APKs found for {abi}")
+              subprocess.run([str(apksigner), "verify", "--verbose", str(apk)], check=True)
+              expected[abi] = apk
+
+          missing = [abi for abi, apk in expected.items() if apk is None]
+          if missing:
+              print("APK candidates:")
+              for apk in sorted(apk_root.rglob("*.apk")):
+                  print(apk)
+              raise SystemExit(f"ERROR: no signed split APK found for {', '.join(missing)}")
+
+          for abi, apk in expected.items():
+              destination = out / f"SingularityV2-{abi}.apk"
+              shutil.copy2(apk, destination)
+              print(f"Verified {abi}: {destination}")
+          print("All Android APK checks passed")
+          PYEOF
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
