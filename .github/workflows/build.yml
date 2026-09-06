@@ -188,7 +188,35 @@ jobs:
           SRC="src-tauri/android-plugin/jniLibs"
           DEST="src-tauri/gen/android/app/src/main/jniLibs"
           test -d "$SRC"
-          sha256sum -c "$SRC/SHA256SUMS.txt"
+          git lfs pull --include="src-tauri/android-plugin/jniLibs/**"
+          git lfs checkout
+          python3 - "$SRC/SHA256SUMS.txt" <<'PYEOF'
+          import hashlib
+          import sys
+          from pathlib import Path
+
+          sums = Path(sys.argv[1])
+          failures = []
+          for raw in sums.read_text().splitlines():
+              if not raw.strip():
+                  continue
+              expected, relative = raw.split(None, 1)
+              path = Path(relative.strip())
+              if not path.is_file():
+                  failures.append(f"missing: {path}")
+                  continue
+              data = path.read_bytes()
+              if data.startswith(b"version https://git-lfs.github.com/spec/v1"):
+                  failures.append(f"LFS pointer not hydrated: {path}")
+                  continue
+              actual = hashlib.sha256(data).hexdigest()
+              if actual != expected:
+                  failures.append(f"sha256 mismatch: {path} (expected {expected}, got {actual})")
+          if failures:
+              print("\n".join(failures), file=sys.stderr)
+              raise SystemExit(1)
+          print(f"Verified {len([line for line in sums.read_text().splitlines() if line.strip()])} native libraries")
+          PYEOF
           rm -rf "$DEST"
           mkdir -p "$DEST"
           cp -R "$SRC"/. "$DEST"/
