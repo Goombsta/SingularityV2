@@ -41,14 +41,13 @@ Do not rely on a previously generated `src-tauri/gen/android` directory. `tauri 
 
 The complete CI/release contract, including resource exclusion, LFS hydration, ABI selection, signing, and APK verification, is documented in [`docs/ANDROID-RELEASE.md`](../../docs/ANDROID-RELEASE.md).
 
-Keep the Android build limited to the ABIs for which both Rust and MPV libraries are present:
+For the release workflow, do not add a multi-ABI `abiFilters` override: it causes every
+`--split-per-abi` APK to contain both architectures. The checked-in `jniLibs` directories
+and the Tauri command below select the supported ABIs and produce one APK per ABI:
 
-```groovy
-android {
-    defaultConfig {
-        ndk { abiFilters "arm64-v8a", "x86_64" }
-    }
-}
+```sh
+npm run tauri android build -- --apk \
+  --target aarch64 --target x86_64 --split-per-abi --ci
 ```
 
 If `CredentialPlugin.kt` is enabled for a local build, keep its AndroidX security dependency as well:

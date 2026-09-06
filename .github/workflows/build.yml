@@ -264,7 +264,7 @@ jobs:
           EOF
           echo "MainActivity updated"
 
-      - name: Patch Gradle — add JitPack repository and NDK abiFilters
+      - name: Patch Gradle — add JitPack repository
         run: |
           python3 - <<'PYEOF'
           import sys
@@ -284,13 +284,7 @@ jobs:
           open(ROOT, "w").write(root)
           print("Root Gradle patched — JitPack added")
 
-          # ── App: add NDK abiFilters after versionName line ──
           app = open(APP).read()
-          ndk_block = '\n        ndk {\n            abiFilters += listOf("arm64-v8a", "x86_64")\n        }'
-          marker = 'versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")'
-          if marker in app and 'abiFilters' not in app:
-              app = app.replace(marker, marker + ndk_block)
-              print("App Gradle patched — NDK abiFilters added")
 
           # ── App: ensure useLegacyPackaging for jniLibs (required for vendored libmpv.so) ──
           if 'useLegacyPackaging' not in app:
@@ -389,10 +383,13 @@ jobs:
                   continue
               with zipfile.ZipFile(apk) as archive:
                   names = set(archive.namelist())
-              if "libmpv-2.dll" in names or any(
-                  name.endswith("git-lfs.github.com/spec/v1") for name in names
-              ):
+              if any(name.endswith("libmpv-2.dll") for name in names):
                   raise SystemExit(f"ERROR: desktop DLL or Git LFS pointer found in {apk}")
+              for name in names:
+                  if name.startswith("lib/") and name.endswith(".so"):
+                      with zipfile.ZipFile(apk) as archive:
+                          if archive.read(name).startswith(b"version https://git-lfs.github.com/spec/v1"):
+                              raise SystemExit(f"ERROR: Git LFS pointer found in {apk}: {name}")
               matches = [abi for abi in expected if f"lib/{abi}/libmpv.so" in names]
               if len(matches) != 1:
                   continue
