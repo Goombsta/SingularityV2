@@ -370,7 +370,8 @@ jobs:
             cp -R "$SRC/$ABI" "$DEST/"
             npm run tauri android build -- --apk --target "$TARGET" --ci
             APK=$(find src-tauri/gen/android/app/build/outputs/apk -type f \
-              -name "app-${SHORT}-release.apk" | head -n 1 || true)
+              \( -name "app-${SHORT}-release.apk" -o -name "app-universal-release.apk" \) \
+              -printf '%T@ %p\n' | sort -nr | cut -d' ' -f2- | head -n 1 || true)
             if [ -z "$APK" ]; then
               echo "ERROR: no signed APK found for $ABI"
               find src-tauri/gen/android/app/build/outputs/apk -type f -name '*.apk' -print || true
