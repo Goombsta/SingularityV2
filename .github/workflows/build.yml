@@ -188,7 +188,6 @@ jobs:
           SRC="src-tauri/android-plugin/jniLibs"
           DEST="src-tauri/gen/android/app/src/main/jniLibs"
           test -d "$SRC"
-          git lfs pull --include="src-tauri/android-plugin/jniLibs/**"
           git lfs checkout
           python3 - "$SRC/SHA256SUMS.txt" <<'PYEOF'
           import hashlib
