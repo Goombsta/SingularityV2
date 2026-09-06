@@ -382,13 +382,16 @@ jobs:
               if "unsigned" in apk.name.lower():
                   continue
               with zipfile.ZipFile(apk) as archive:
-                  names = set(archive.namelist())
+                  entries = {name.lstrip("./"): name for name in archive.namelist()}
+                  names = set(entries)
+                  native_names = sorted(name for name in names if name.startswith("lib/"))
+                  print(f"Inspecting {apk}: {native_names}")
               if any(name.endswith("libmpv-2.dll") for name in names):
                   raise SystemExit(f"ERROR: desktop DLL or Git LFS pointer found in {apk}")
               for name in names:
                   if name.startswith("lib/") and name.endswith(".so"):
                       with zipfile.ZipFile(apk) as archive:
-                          if archive.read(name).startswith(b"version https://git-lfs.github.com/spec/v1"):
+                          if archive.read(entries[name]).startswith(b"version https://git-lfs.github.com/spec/v1"):
                               raise SystemExit(f"ERROR: Git LFS pointer found in {apk}: {name}")
               matches = [abi for abi in expected if f"lib/{abi}/libmpv.so" in names]
               if len(matches) != 1:
